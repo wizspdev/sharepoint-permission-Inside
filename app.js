@@ -8,6 +8,7 @@ class SharePointPermissionsApp {
         this.authManager = null;
         this.spAPI = null;
         this.graphAPI = null;
+        this.azureStorage = null;
         this.permissionAggregator = null;
         this.userSelector = null;
         this.permissionModal = null;
@@ -33,6 +34,7 @@ class SharePointPermissionsApp {
             // Initialize APIs
             this.spAPI = new SharePointAPI(this.authManager, CONFIG);
             this.graphAPI = new GraphAPI(this.authManager, CONFIG);
+            this.azureStorage = new AzureStorageClient(CONFIG);
             this.permissionAggregator = new PermissionAggregator(this.spAPI, this.graphAPI, CONFIG);
 
             // Initialize utility components
@@ -103,7 +105,8 @@ class SharePointPermissionsApp {
                 document.getElementById('sites-panel'),
                 this.spAPI,
                 this.graphAPI,
-                CONFIG
+                CONFIG,
+                this.azureStorage
             );
             await this.components.sitePermissions.render();
 
@@ -112,7 +115,8 @@ class SharePointPermissionsApp {
                 document.getElementById('folders-panel'),
                 this.spAPI,
                 this.graphAPI,
-                CONFIG
+                CONFIG,
+                this.azureStorage
             );
             await this.components.folderPermissions.render();
 
@@ -121,7 +125,8 @@ class SharePointPermissionsApp {
                 document.getElementById('shared-panel'),
                 this.spAPI,
                 this.graphAPI,
-                CONFIG
+                CONFIG,
+                this.azureStorage
             );
             await this.components.sharedFolders.render();
 
@@ -131,9 +136,19 @@ class SharePointPermissionsApp {
                 this.spAPI,
                 this.graphAPI,
                 this.permissionAggregator,
-                CONFIG
+                CONFIG,
+                this.azureStorage
             );
             await this.components.userLookup.render();
+
+            // Settings Component
+            this.components.settings = new SettingsComponent(
+                document.getElementById('settings-panel'),
+                this.azureStorage,
+                this.graphAPI,
+                CONFIG
+            );
+            await this.components.settings.render();
 
             console.log('All components initialized');
         } catch (error) {

@@ -241,6 +241,117 @@ class GraphAPI {
     }
 
     /**
+     * Παίρνει όλα τα SharePoint sites με pagination
+     * Αυτή η μέθοδος φέρνει όλα τα sites από το tenant
+     */
+    async getAllSites(options = {}) {
+        const {
+            top = 100,
+            orderBy = 'displayName',
+            filter = null,
+            includePersonalSites = false
+        } = options;
+
+        try {
+            let url = `/sites?$select=id,name,displayName,webUrl,description,createdDateTime,lastModifiedDateTime&$top=${top}`;
+            
+            if (orderBy) {
+                url += `&$orderby=${orderBy}`;
+            }
+
+            if (filter) {
+                url += `&$filter=${filter}`;
+            }
+
+            const result = await this.get(url, false, false); // No cache for full site list
+            let allSites = result.value || [];
+
+            // Handle pagination
+            let nextLink = result['@odata.nextLink'];
+            while (nextLink) {
+                this.logInfo('Fetching next page of sites...');
+                const nextResult = await this.get(nextLink, false, false);
+                allSites = allSites.concat(nextResult.value || []);
+                nextLink = nextResult['@odata.nextLink'];
+            }
+
+            // Filter out personal sites if requested
+            if (!includePersonalSites) {
+                allSites = allSites.filter(site => {
+                    const url = site.webUrl || '';
+                    // Φιλτράρουμε τα personal OneDrive sites
+                    return !url.includes('-my.sharepoint.com') && !url.includes('/personal/');
+                });
+            }
+
+            this.logInfo(`Loaded ${allSites.length} SharePoint sites`);
+            return allSites;
+        } catch (error) {
+            this.logError('Failed to get all sites', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Αναζητά sites με search query
+     */
+    async searchSites(query, top = 20) {
+        if (!query || query.trim() === '') {
+            return [];
+        }
+
+        try {
+            // Χρησιμοποιούμε το search API
+            const url = `/sites?search=${encodeURIComponent(query)}&$top=${top}&$select=id,name,displayName,webUrl,description`;
+            const result = await this.get(url, false, false);
+            
+            return result.value || [];
+        } catch (error) {
+            this.logError('Failed to search sites', error);
+            return [];
+        }
+    }
+
+    /**
+     * Παίρνει sites με filtering options
+     */
+    async getFilteredSites(filterOptions = {}) {
+        const {
+            search = null,
+            includeArchived = false,
+            siteType = null, // 'team', 'communication', etc.
+            maxResults = 100
+        } = filterOptions;
+
+        try {
+            if (search) {
+                return await this.searchSites(search, maxResults);
+            }
+
+            const allSites = await this.getAllSites({ top: maxResults });
+            
+            let filtered = allSites;
+
+            // Additional filtering can be added here based on siteType, etc.
+            if (siteType) {
+                // Graph API doesn't directly expose site type, but we can infer from URL patterns
+                filtered = filtered.filter(site => {
+                    const url = site.webUrl || '';
+                    if (siteType === 'team') {
+                        return url.includes('/sites/');
+                    }
+                    return true;
+                });
+            }
+
+            return filtered;
+        } catch (error) {
+            this.logError('Failed to get filtered sites', error);
+            return [];
+        }
+    }
+
+    /**
      * Παίρνει site by URL
      */
     async getSiteByUrl(siteUrl) {

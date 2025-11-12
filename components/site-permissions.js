@@ -4,12 +4,16 @@
  */
 
 class SitePermissionsComponent {
-    constructor(container, spAPI, graphAPI, config) {
+    constructor(container, spAPI, graphAPI, config, azureStorage) {
         this.container = container;
         this.spAPI = spAPI;
         this.graphAPI = graphAPI;
         this.config = config;
+        this.azureStorage = azureStorage;
+        this.siteSelector = null;
         this.currentSite = null;
+        this.currentSites = []; // Για multi-site support
+        this.isMultiSite = false;
         this.permissions = [];
         this.filteredPermissions = [];
         this.currentPage = 1;
@@ -44,13 +48,8 @@ class SitePermissionsComponent {
                     <div class="card-body">
                         <div class="row">
                             <div class="col-md-8">
-                                <label for="siteSelector" class="form-label">Επιλέξτε Site</label>
-                                <select class="form-select" id="siteSelector">
-                                    <option value="">-- Επιλέξτε Site --</option>
-                                    ${this.config.sharepoint.monitoredSites.map(site => 
-                                        `<option value="${site}">${this._getSiteName(site)}</option>`
-                                    ).join('')}
-                                </select>
+                                <label class="form-label">Επιλέξτε Site</label>
+                                <div id="sitePermsSiteSelector"></div>
                             </div>
                             <div class="col-md-4">
                                 <label for="searchSitePerms" class="form-label">Αναζήτηση</label>
@@ -78,6 +77,17 @@ class SitePermissionsComponent {
             </div>
         `;
 
+        // Initialize Site Selector Component
+        this.siteSelector = new SiteSelectorComponent(this.graphAPI, this.azureStorage, this.config);
+        await this.siteSelector.render('sitePermsSiteSelector', {
+            mode: 'single',
+            showDefaultOption: true,
+            placeholder: 'Επιλέξτε Site',
+            onSelectionChange: async (sites, isDefault) => {
+                await this._handleSiteSelection(sites, isDefault);
+            }
+        });
+
         this._attachEventListeners();
     }
 
@@ -85,12 +95,6 @@ class SitePermissionsComponent {
      * Attach event listeners
      */
     _attachEventListeners() {
-        // Site selector
-        const siteSelector = document.getElementById('siteSelector');
-        siteSelector?.addEventListener('change', (e) => {
-            this.loadSitePermissions(e.target.value);
-        });
-
         // Search
         const searchInput = document.getElementById('searchSitePerms');
         searchInput?.addEventListener('input', debounce((e) => {
@@ -99,9 +103,14 @@ class SitePermissionsComponent {
 
         // Refresh button
         document.getElementById('refreshSitePermsBtn')?.addEventListener('click', () => {
-            if (this.currentSite) {
-                this.spAPI.clearCacheForSite(this.currentSite);
-                this.loadSitePermissions(this.currentSite);
+            if (this.currentSite || this.currentSites.length > 0) {
+                if (this.isMultiSite) {
+                    this.currentSites.forEach(site => this.spAPI.clearCacheForSite(site));
+                    this._handleSiteSelection(this.currentSites, true);
+                } else {
+                    this.spAPI.clearCacheForSite(this.currentSite);
+                    this.loadSitePermissions(this.currentSite);
+                }
             } else {
                 showNotification('Επιλέξτε πρώτα ένα site', 'warning');
             }
@@ -111,6 +120,83 @@ class SitePermissionsComponent {
         document.getElementById('exportSitePermsBtn')?.addEventListener('click', () => {
             this._exportPermissions();
         });
+    }
+
+    /**
+     * Handle site selection από το SiteSelectorComponent
+     */
+    async _handleSiteSelection(sites, isDefault) {
+        if (!sites || sites.length === 0) {
+            this.currentSite = null;
+            this.currentSites = [];
+            this.isMultiSite = false;
+            this.permissions = [];
+            this.filteredPermissions = [];
+            this._renderTable();
+            return;
+        }
+
+        if (isDefault && sites.length > 1) {
+            // Multi-site mode (προεπιλεγμένα)
+            this.isMultiSite = true;
+            this.currentSites = sites;
+            this.currentSite = null;
+            await this._loadMultiSitePermissions(sites);
+        } else {
+            // Single site mode
+            this.isMultiSite = false;
+            this.currentSite = sites[0];
+            this.currentSites = [];
+            await this.loadSitePermissions(sites[0]);
+        }
+    }
+
+    /**
+     * Load permissions από πολλά sites (aggregated view)
+     */
+    async _loadMultiSitePermissions(siteUrls) {
+        showLoading('Φόρτωση δικαιωμάτων από πολλά sites...');
+
+        try {
+            const allPermissions = [];
+
+            for (const siteUrl of siteUrls) {
+                try {
+                    const roleAssignments = await this.spAPI.getSitePermissions(siteUrl);
+                    const processed = await this._processPermissions(roleAssignments, siteUrl);
+                    
+                    // Προσθήκη site info σε κάθε permission
+                    processed.forEach(p => {
+                        p.siteUrl = siteUrl;
+                        p.siteName = this._getSiteName(siteUrl);
+                    });
+
+                    allPermissions.push(...processed);
+                } catch (error) {
+                    console.error(`Failed to load permissions for ${siteUrl}`, error);
+                }
+            }
+
+            this.permissions = allPermissions;
+            this.filteredPermissions = [...this.permissions];
+            
+            this._sortPermissions();
+            this._renderTable();
+            
+            hideLoading();
+            showNotification(`Φορτώθηκαν ${this.permissions.length} εγγραφές από ${siteUrls.length} sites`, 'success');
+        } catch (error) {
+            hideLoading();
+            console.error('Failed to load multi-site permissions', error);
+            showNotification('Αποτυχία φόρτωσης δικαιωμάτων', 'error');
+            
+            document.getElementById('sitePermissionsTable').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi ${ICONS.error}"></i>
+                    Αποτυχία φόρτωσης δικαιωμάτων: ${error.message}
+                </div>
+            `;
+        }
     }
 
     /**
@@ -212,6 +298,7 @@ class SitePermissionsComponent {
                             <th class="sortable" data-column="email">
                                 Email <i class="bi ${this._getSortIcon('email')}"></i>
                             </th>
+                            ${this.isMultiSite ? '<th class="sortable" data-column="siteName">Site <i class="bi ' + this._getSortIcon('siteName') + '"></i></th>' : ''}
                             <th>Δικαιώματα</th>
                             <th>Ενέργειες</th>
                         </tr>
@@ -230,20 +317,23 @@ class SitePermissionsComponent {
                         <span class="badge bg-secondary">${perm.principalType}</span>
                     </td>
                     <td>${escapeHtml(perm.email)}</td>
+                    ${this.isMultiSite ? `<td><small class="text-muted">${escapeHtml(perm.siteName || '')}</small></td>` : ''}
                     <td>${this._renderRoleBadges(perm.roles)}</td>
                     <td>
-                        <button class="btn btn-sm btn-outline-primary edit-perm-btn" 
-                                data-principal-id="${perm.principalId}"
-                                data-principal-name="${escapeHtml(perm.principalName)}"
-                                title="Επεξεργασία">
-                            <i class="bi ${ICONS.edit}"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger remove-perm-btn" 
-                                data-principal-id="${perm.principalId}"
-                                data-principal-name="${escapeHtml(perm.principalName)}"
-                                title="Αφαίρεση">
-                            <i class="bi ${ICONS.delete}"></i>
-                        </button>
+                        ${!this.isMultiSite ? `
+                            <button class="btn btn-sm btn-outline-primary edit-perm-btn" 
+                                    data-principal-id="${perm.principalId}"
+                                    data-principal-name="${escapeHtml(perm.principalName)}"
+                                    title="Επεξεργασία">
+                                <i class="bi ${ICONS.edit}"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger remove-perm-btn" 
+                                    data-principal-id="${perm.principalId}"
+                                    data-principal-name="${escapeHtml(perm.principalName)}"
+                                    title="Αφαίρεση">
+                                <i class="bi ${ICONS.delete}"></i>
+                            </button>
+                        ` : '<small class="text-muted">Multi-site view</small>'}
                     </td>
                 </tr>
             `;

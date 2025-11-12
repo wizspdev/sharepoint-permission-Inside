@@ -5,12 +5,15 @@
  */
 
 class UserPermissionsLookupComponent {
-    constructor(container, spAPI, graphAPI, permissionAggregator, config) {
+    constructor(container, spAPI, graphAPI, permissionAggregator, config, azureStorage) {
         this.container = container;
         this.spAPI = spAPI;
         this.graphAPI = graphAPI;
         this.permissionAggregator = permissionAggregator;
         this.config = config;
+        this.azureStorage = azureStorage;
+        this.siteSelector = null;
+        this.selectedSites = [];
         this.currentUser = null;
         this.userPermissions = null;
     }
@@ -26,6 +29,15 @@ class UserPermissionsLookupComponent {
                     <div class="col-md-12">
                         <h4><i class="bi ${ICONS.user}"></i> Αναζήτηση Δικαιωμάτων Χρήστη</h4>
                         <p class="text-muted">Αναζητήστε έναν χρήστη για να δείτε σε ποια sites και φακέλους έχει πρόσβαση</p>
+                    </div>
+                </div>
+
+                <!-- Site Filter -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <label class="form-label">Φιλτράρισμα Sites (προαιρετικό)</label>
+                        <div id="userLookupSiteSelector"></div>
+                        <small class="text-muted">Αφήστε κενό για αναζήτηση σε όλα τα configured sites</small>
                     </div>
                 </div>
 
@@ -111,6 +123,20 @@ class UserPermissionsLookupComponent {
                 </div>
             </div>
         `;
+
+        // Initialize Site Selector Component για filtering
+        this.siteSelector = new SiteSelectorComponent(this.graphAPI, this.azureStorage, this.config);
+        await this.siteSelector.render('userLookupSiteSelector', {
+            mode: 'multi',
+            showDefaultOption: true,
+            onSelectionChange: async (sites, isDefault) => {
+                this.selectedSites = sites;
+                // Αν έχει ήδη γίνει αναζήτηση χρήστη, ξανακάνε την αναζήτηση με το νέο φίλτρο
+                if (this.currentUser) {
+                    await this.loadUserPermissions(this.currentUser);
+                }
+            }
+        });
 
         this._attachEventListeners();
     }

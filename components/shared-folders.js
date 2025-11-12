@@ -4,11 +4,13 @@
  */
 
 class SharedFoldersComponent {
-    constructor(container, spAPI, graphAPI, config) {
+    constructor(container, spAPI, graphAPI, config, azureStorage) {
         this.container = container;
         this.spAPI = spAPI;
         this.graphAPI = graphAPI;
         this.config = config;
+        this.azureStorage = azureStorage;
+        this.siteSelector = null;
         this.currentSite = null;
         this.sharedFolders = [];
     }
@@ -34,13 +36,8 @@ class SharedFoldersComponent {
                 <!-- Site Selector -->
                 <div class="card mb-3">
                     <div class="card-body">
-                        <label for="sharedFolderSiteSelector" class="form-label">Επιλέξτε Site</label>
-                        <select class="form-select" id="sharedFolderSiteSelector">
-                            <option value="">-- Επιλέξτε Site --</option>
-                            ${this.config.sharepoint.monitoredSites.map(site => 
-                                `<option value="${site}">${this._getSiteName(site)}</option>`
-                            ).join('')}
-                        </select>
+                        <label class="form-label">Επιλέξτε Site</label>
+                        <div id="sharedFoldersSiteSelector"></div>
                     </div>
                 </div>
 
@@ -54,6 +51,19 @@ class SharedFoldersComponent {
             </div>
         `;
 
+        // Initialize Site Selector Component
+        this.siteSelector = new SiteSelectorComponent(this.graphAPI, this.azureStorage, this.config);
+        await this.siteSelector.render('sharedFoldersSiteSelector', {
+            mode: 'single',
+            showDefaultOption: true,
+            placeholder: 'Επιλέξτε Site',
+            onSelectionChange: async (sites, isDefault) => {
+                if (sites && sites.length > 0) {
+                    await this.loadSharedFolders(sites[0]);
+                }
+            }
+        });
+
         this._attachEventListeners();
     }
 
@@ -61,11 +71,6 @@ class SharedFoldersComponent {
      * Attach event listeners
      */
     _attachEventListeners() {
-        // Site selector
-        const siteSelector = document.getElementById('sharedFolderSiteSelector');
-        siteSelector?.addEventListener('change', (e) => {
-            this.loadSharedFolders(e.target.value);
-        });
 
         // Refresh button
         document.getElementById('refreshSharedFoldersBtn')?.addEventListener('click', () => {

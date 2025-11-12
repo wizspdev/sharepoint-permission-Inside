@@ -27,6 +27,7 @@
 - **SharePoint Online** tenant (Microsoft 365)
 - **Azure AD** με δικαιώματα δημιουργίας App Registration
 - **Δικαιώματα χρήστη**: Site Collection Administrator ή Global Administrator
+- **Azure Storage Account** (προαιρετικό): Για αποθήκευση προεπιλεγμένων sites
 
 ## 🚀 Γρήγορη Εγκατάσταση
 
@@ -60,7 +61,29 @@
 
 Κάντε **Grant admin consent** για όλα τα permissions.
 
-### Βήμα 3: Configuration
+### Βήμα 3: Azure Storage Setup (Προαιρετικό)
+
+Για αποθήκευση προεπιλεγμένων sites στο cloud:
+
+1. **Δημιουργία Storage Account**:
+   - Πηγαίνετε στο [Azure Portal](https://portal.azure.com)
+   - Δημιουργήστε ένα Storage Account
+   - Performance: Standard
+   - Redundancy: LRS (ή όπως προτιμάτε)
+
+2. **Δημιουργία Table**:
+   - Στο Storage Account, πηγαίνετε στο **Tables**
+   - Δημιουργήστε table με όνομα `DefaultSites`
+
+3. **Δημιουργία SAS Token**:
+   - Πηγαίνετε στο **Shared access signature**
+   - Επιλέξτε: **Table service**
+   - Permissions: Read, Write, Add, Update, Delete
+   - Expiry date: Επιλέξτε ημερομηνία λήξης
+   - Κλικάρετε **Generate SAS and connection string**
+   - Αντιγράψτε το **SAS token** (το τμήμα μετά το `?`)
+
+### Βήμα 4: Configuration
 
 Επεξεργαστείτε το αρχείο `config.js` και ενημερώστε:
 
@@ -78,11 +101,18 @@ const CONFIG = {
             'https://YOUR_TENANT.sharepoint.com/sites/Site2',
             // Προσθέστε περισσότερα sites
         ]
+    },
+    // Azure Storage (προαιρετικό)
+    azureStorage: {
+        accountName: 'YOUR_STORAGE_ACCOUNT_NAME',
+        tableName: 'DefaultSites',
+        sasToken: 'YOUR_SAS_TOKEN_HERE',
+        enabled: true  // Set σε false αν δεν θέλετε Azure Storage
     }
 };
 ```
 
-### Βήμα 4: Upload στο SharePoint
+### Βήμα 5: Upload στο SharePoint
 
 1. Μεταβείτε στο SharePoint site σας
 2. Ανοίξτε το **Site Contents**
@@ -110,7 +140,7 @@ const CONFIG = {
        └── permission-modal.js
    ```
 
-### Βήμα 5: Πρόσβαση στην Εφαρμογή
+### Βήμα 6: Πρόσβαση στην Εφαρμογή
 
 Ανοίξτε το browser και μεταβείτε στο:
 ```
@@ -118,6 +148,21 @@ https://YOUR_TENANT.sharepoint.com/sites/YOUR_SITE/SiteAssets/SPAccess/index.htm
 ```
 
 ## 📖 Οδηγός Χρήσης
+
+### Διαχείριση Προεπιλεγμένων Sites
+
+Η νέα λειτουργικότητα επιτρέπει:
+- **Αποθήκευση Default Sites**: Ορίστε τα sites που χρησιμοποιείτε συχνότερα
+- **Site Selector με Autocomplete**: Αναζητήστε και επιλέξτε sites εύκολα
+- **Φιλτράρισμα**: Χρησιμοποιήστε την επιλογή "Προεπιλεγμένα" για γρήγορη πρόσβαση
+
+#### Ρύθμιση Default Sites:
+1. Μεταβείτε στο tab **Ρυθμίσεις**
+2. Κλικάρετε **Προσθήκη Site**
+3. Αναζητήστε ή εισάγετε το URL του site
+4. Κλικάρετε **Αποθήκευση**
+
+Τα default sites αποθηκεύονται στο Azure Storage (αν έχει ρυθμιστεί) ή τοπικά στον browser.
 
 ### Προβολή Site Permissions
 
@@ -155,9 +200,10 @@ https://YOUR_TENANT.sharepoint.com/sites/YOUR_SITE/SiteAssets/SPAccess/index.htm
 Αυτή η λειτουργία σας επιτρέπει να δείτε **ανά χρήστη** σε ποια sites και folders έχει πρόσβαση.
 
 1. Κλικάρετε στο tab **Αναζήτηση Χρήστη**
-2. Εισάγετε το email του χρήστη
-3. Κλικάρετε **Αναζήτηση**
-4. Θα εμφανιστούν:
+2. **(Προαιρετικό)** Επιλέξτε sites για φιλτράρισμα
+3. Εισάγετε το email του χρήστη
+4. Κλικάρετε **Αναζήτηση**
+5. Θα εμφανιστούν:
    - Όλα τα sites με πρόσβαση
    - Όλοι οι φάκελοι με μοναδικά δικαιώματα
    - Οι ομάδες στις οποίες ανήκει
@@ -176,19 +222,23 @@ https://YOUR_TENANT.sharepoint.com/sites/YOUR_SITE/SiteAssets/SPAccess/index.htm
 
 ### APIs
 - **SharePoint REST API**: Για site/folder permissions
-- **Microsoft Graph API**: Για user/group information
+- **Microsoft Graph API**: Για user/group information και site discovery
+- **Azure Table Storage REST API**: Για αποθήκευση default sites (προαιρετικό)
 
 ### Components
 ```
 ├── AuthManager: Authentication & token management
 ├── SharePointAPI: SharePoint REST API client
-├── GraphAPI: Microsoft Graph API client
+├── GraphAPI: Microsoft Graph API client (με enhanced site discovery)
+├── AzureStorageClient: Azure Table Storage client
 ├── PermissionAggregator: Aggregation logic για user permissions
 └── UI Components:
-    ├── SitePermissionsComponent
+    ├── SitePermissionsComponent (με multi-site support)
     ├── FolderPermissionsComponent
     ├── SharedFoldersComponent
-    ├── UserPermissionsLookupComponent
+    ├── UserPermissionsLookupComponent (με site filtering)
+    ├── SiteSelectorComponent (νέο - reusable με autocomplete)
+    ├── SettingsComponent (νέο - διαχείριση default sites)
     ├── UserSelectorComponent
     └── PermissionModalComponent
 ```
@@ -264,6 +314,14 @@ https://YOUR_TENANT.sharepoint.com/sites/YOUR_SITE/SiteAssets/SPAccess/index.htm
 **Λύση**: Βεβαιωθείτε ότι τρέχει από SharePoint domain και όχι τοπικά
 
 ## 📝 Changelog
+
+### Version 1.1.0 (2025-11-13)
+- ✨ **Azure Storage Integration**: Αποθήκευση default sites στο cloud
+- 🔍 **Enhanced Site Discovery**: Αυτόματη φόρτωση όλων των SharePoint sites
+- 🎯 **SiteSelectorComponent**: Reusable component με autocomplete
+- ⚙️ **Settings Panel**: UI για διαχείριση default sites
+- 🎨 **Multi-site Support**: Προβολή permissions από πολλά sites ταυτόχρονα
+- 🔧 **Site Filtering**: Φιλτράρισμα user lookup ανά site
 
 ### Version 1.0.0 (2025-11-12)
 - ✨ Initial release

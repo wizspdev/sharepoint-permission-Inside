@@ -93,6 +93,12 @@
                         <i class="bi bi-person-search"></i> Αναζήτηση Χρήστη
                     </button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="settings-tab" data-bs-toggle="tab" 
+                            data-bs-target="#settings-panel" type="button" role="tab">
+                        <i class="bi bi-gear"></i> Ρυθμίσεις
+                    </button>
+                </li>
             </ul>
 
             <!-- Tab Content -->
@@ -115,6 +121,11 @@
                 <!-- User Lookup Tab -->
                 <div class="tab-pane fade" id="user-lookup-panel" role="tabpanel">
                     <!-- Content will be rendered by UserPermissionsLookupComponent -->
+                </div>
+
+                <!-- Settings Tab -->
+                <div class="tab-pane fade" id="settings-panel" role="tabpanel">
+                    <!-- Content will be rendered by SettingsComponent -->
                 </div>
             </div>
         </div>
@@ -149,14 +160,17 @@
     <script src="auth.js"></script>
     <script src="sp-api.js"></script>
     <script src="graph-api.js"></script>
+    <script src="azure-storage.js"></script>
     
     <!-- Components -->
+    <script src="components/site-selector.js"></script>
     <script src="components/user-selector.js"></script>
     <script src="components/permission-modal.js"></script>
     <script src="components/site-permissions.js"></script>
     <script src="components/folder-permissions.js"></script>
     <script src="components/shared-folders.js"></script>
     <script src="components/user-permissions-lookup.js"></script>
+    <script src="components/settings.js"></script>
     
     <!-- Main App -->
     <script src="app.js"></script>

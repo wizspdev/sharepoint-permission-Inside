@@ -73,6 +73,23 @@ const CONFIG = {
         betaEndpoint: 'https://graph.microsoft.com/beta'
     },
 
+    // Azure Storage Configuration (για αποθήκευση default sites)
+    azureStorage: {
+        // Storage account name (π.χ. 'mystorage')
+        accountName: 'sppermisionstorage', // π.χ. 'sppermstorage'
+        
+        // Table name
+        tableName: 'DefaultSites',
+        
+        // SAS Token (Shared Access Signature)
+        // Δημιουργήστε έναν SAS token με Table permissions: Read, Add, Update, Delete
+        sasToken: 'sv=2024-11-04&ss=t&srt=sco&sp=rwdlacu&se=2026-11-12T23:01:41Z&st=2025-11-12T14:46:41Z&spr=https&sig=f93%2BdAYDgkU8IusRc0jSJSvUII7ys%2Bb0Je7UTNwlV0c%3D', // π.χ. 'sv=2021-06-08&ss=t&srt=sco&sp=rwdlacu&se=2025-12-31...'
+        
+        // Ενεργοποίηση Azure Storage
+        // Αν είναι false, η εφαρμογή θα χρησιμοποιεί μόνο τα monitoredSites από το config
+        enabled: true
+    },
+
     // Application Settings
     app: {
         // Όνομα εφαρμογής
