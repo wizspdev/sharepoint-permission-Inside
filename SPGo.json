@@ -1,0 +1,12 @@
+{
+    "sourceDirectory": "src",
+    "sharePointSiteUrl": "https://wiz365.sharepoint.com/sites/PermissionManager",
+    "workspaceRoot": "c:\\Users\\mapos\\OneDrive - WIZSP S.R.L\\GitHub\\WizspDev\\Sharepoint\\SPAccess",
+    "publishWorkspaceOptions": {
+        "destinationFolder": "/",
+        "globPattern": "c:\\Users\\mapos\\OneDrive - WIZSP S.R.L\\GitHub\\WizspDev\\Sharepoint\\SPAccess\\src\\**\\*.*",
+        "localRoot": "c:\\Users\\mapos\\OneDrive - WIZSP S.R.L\\GitHub\\WizspDev\\Sharepoint\\SPAccess\\src"
+    },
+    "publishingScope": "SaveOnly",
+    "authenticationType": "Digest"
+}

@@ -1,0 +1,36 @@
+# SharePoint Permissions Manager - .gitignore
+
+# Configuration files with sensitive data
+config.js
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.bak
+*.cache
+
+# Node modules (if you add any build process later)
+node_modules/
+
+# Build outputs (if you add any build process later)
+dist/
+build/
+
+# Test files
+test/
+*.test.js
+
