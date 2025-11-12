@@ -62,9 +62,9 @@ class AzureStorageClient {
     }
 
     /**
-     * Generic POST/PUT request στο Table Storage
+     * Insert a new entity (POST request)
      */
-    async upsert(entity) {
+    async insertEntity(entity) {
         if (!this.isConfigured()) {
             throw new Error('Azure Storage is not configured');
         }
@@ -74,6 +74,44 @@ class AzureStorageClient {
         try {
             const response = await fetch(url, {
                 method: 'POST',
+                headers: {
+                    'Accept': 'application/json;odata=nometadata',
+                    'Content-Type': 'application/json',
+                    'x-ms-version': '2019-02-02',
+                    'Prefer': 'return-no-content'
+                },
+                body: JSON.stringify(entity)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Azure Storage INSERT failed: ${response.status} - ${errorText}`);
+            }
+
+            // Clear cache
+            this.clearCache();
+
+            return true;
+        } catch (error) {
+            this.logError('INSERT request failed', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Update or Insert entity (PUT request with InsertOrReplace)
+     */
+    async upsertEntity(entity) {
+        if (!this.isConfigured()) {
+            throw new Error('Azure Storage is not configured');
+        }
+
+        const { PartitionKey, RowKey } = entity;
+        const url = `${this.getBaseUrl()}(PartitionKey='${PartitionKey}',RowKey='${RowKey}')?${this.sasToken}`;
+
+        try {
+            const response = await fetch(url, {
+                method: 'PUT',
                 headers: {
                     'Accept': 'application/json;odata=nometadata',
                     'Content-Type': 'application/json',
@@ -188,7 +226,11 @@ class AzureStorageClient {
 
             // Προσθέτουμε τα νέα
             for (const site of sites) {
-                await this.addDefaultSite(site);
+                // If site is just a URL string, convert to object
+                const siteUrl = typeof site === 'string' ? site : (site.url || site.SiteUrl);
+                if (siteUrl) {
+                    await this.addDefaultSite(siteUrl);
+                }
             }
 
             this.logInfo(`Saved ${sites.length} default sites to Azure Storage`);
@@ -219,7 +261,18 @@ class AzureStorageClient {
                 AddedDate: new Date().toISOString()
             };
 
-            await this.upsert(entity);
+            // Try to insert first, if entity exists it will fail
+            try {
+                await this.insertEntity(entity);
+            } catch (insertError) {
+                // If insert fails (entity already exists), try upsert
+                if (insertError.message.includes('409') || insertError.message.includes('EntityAlreadyExists')) {
+                    await this.upsertEntity(entity);
+                } else {
+                    throw insertError;
+                }
+            }
+            
             this.logInfo(`Added site to defaults: ${siteName}`);
             
             return true;

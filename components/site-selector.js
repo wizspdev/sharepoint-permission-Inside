@@ -34,10 +34,18 @@ class SiteSelectorComponent {
             return;
         }
 
-        // Φόρτωση sites
-        await this.loadSites();
+        // Initialize default sites IMMEDIATELY from config (synchronous)
+        this.defaultSites = this.config.sharepoint.monitoredSites.map(url => ({
+            url: url,
+            name: this._extractSiteName(url)
+        }));
+        this.allSites = [...this.defaultSites.map(s => ({
+            webUrl: s.url,
+            displayName: s.name,
+            name: s.name
+        }))];
 
-        // Render HTML
+        // Render HTML immediately with config sites
         container.innerHTML = `
             <div class="site-selector-wrapper">
                 ${this.mode === 'single' ? this._renderSingleSelect(placeholder, showDefaultOption) : this._renderMultiSelect(showDefaultOption)}
@@ -46,6 +54,38 @@ class SiteSelectorComponent {
 
         // Attach event listeners
         this._attachEventListeners();
+
+        // Load additional sites in background (async - don't wait)
+        this.loadSites().then(() => {
+            // Re-render dropdown options after loading
+            if (this.mode === 'single') {
+                const dropdown = document.getElementById(`${this.containerId}_dropdown`);
+                if (dropdown) {
+                    const currentValue = dropdown.value;
+                    const optionsHtml = this._renderSiteOptions();
+                    // Update only the options, keep structure
+                    const placeholder = dropdown.querySelector('option[value=""]');
+                    const defaultOption = dropdown.querySelector('option[value="__DEFAULT__"]');
+                    const separator = dropdown.querySelector('option[disabled]');
+                    
+                    dropdown.innerHTML = '';
+                    if (placeholder) dropdown.appendChild(placeholder.cloneNode(true));
+                    if (defaultOption) dropdown.appendChild(defaultOption.cloneNode(true));
+                    if (separator) dropdown.appendChild(separator.cloneNode(true));
+                    
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = `<select>${optionsHtml}</select>`;
+                    const newOptions = tempDiv.querySelector('select').children;
+                    for (const option of newOptions) {
+                        dropdown.appendChild(option);
+                    }
+                    
+                    dropdown.value = currentValue;
+                }
+            }
+        }).catch(err => {
+            this.logError('Background site loading failed', err);
+        });
     }
 
     /**
@@ -121,11 +161,18 @@ class SiteSelectorComponent {
      * Render site options για το dropdown
      */
     _renderSiteOptions() {
-        if (this.allSites.length === 0) {
-            return '<option disabled>Φόρτωση sites...</option>';
+        // Show config sites immediately, even if allSites is loading
+        const sitesToShow = this.allSites.length > 0 ? this.allSites : this.defaultSites.map(s => ({
+            webUrl: s.url,
+            displayName: s.name,
+            name: s.name
+        }));
+
+        if (sitesToShow.length === 0) {
+            return '<option disabled>Δεν βρέθηκαν sites</option>';
         }
 
-        return this.allSites
+        return sitesToShow
             .sort((a, b) => (a.displayName || a.name || '').localeCompare(b.displayName || b.name || ''))
             .map(site => {
                 const name = site.displayName || site.name || site.webUrl;
@@ -170,7 +217,30 @@ class SiteSelectorComponent {
                 this.logInfo(`Loaded ${this.allSites.length} sites from Graph API`);
             } catch (error) {
                 this.logError('Failed to load sites from Graph API', error);
-                this.allSites = [];
+                // Fallback: Use default sites + config sites as "all sites"
+                this.allSites = [
+                    ...this.defaultSites.map(s => ({
+                        webUrl: s.url,
+                        displayName: s.name,
+                        name: s.name
+                    })),
+                    ...this.config.sharepoint.monitoredSites.map(url => ({
+                        webUrl: url,
+                        displayName: this._extractSiteName(url),
+                        name: this._extractSiteName(url)
+                    }))
+                ];
+                // Remove duplicates
+                const uniqueSites = [];
+                const seen = new Set();
+                for (const site of this.allSites) {
+                    if (!seen.has(site.webUrl)) {
+                        seen.add(site.webUrl);
+                        uniqueSites.push(site);
+                    }
+                }
+                this.allSites = uniqueSites;
+                this.logInfo(`Using ${this.allSites.length} sites from config as fallback`);
             }
         } finally {
             this.loadingSites = false;

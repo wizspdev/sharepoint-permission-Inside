@@ -4,11 +4,13 @@
  */
 
 class FolderPermissionsComponent {
-    constructor(container, spAPI, graphAPI, config) {
+    constructor(container, spAPI, graphAPI, config, azureStorage) {
         this.container = container;
         this.spAPI = spAPI;
         this.graphAPI = graphAPI;
         this.config = config;
+        this.azureStorage = azureStorage;
+        this.siteSelector = null;
         this.currentSite = null;
         this.folders = [];
         this.filteredFolders = [];
@@ -42,13 +44,8 @@ class FolderPermissionsComponent {
                     <div class="card-body">
                         <div class="row">
                             <div class="col-md-8">
-                                <label for="folderSiteSelector" class="form-label">Επιλέξτε Site</label>
-                                <select class="form-select" id="folderSiteSelector">
-                                    <option value="">-- Επιλέξτε Site --</option>
-                                    ${this.config.sharepoint.monitoredSites.map(site => 
-                                        `<option value="${site}">${this._getSiteName(site)}</option>`
-                                    ).join('')}
-                                </select>
+                                <label class="form-label">Επιλέξτε Site</label>
+                                <div id="folderPermsSiteSelector"></div>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Φίλτρα</label>
@@ -80,6 +77,19 @@ class FolderPermissionsComponent {
             </div>
         `;
 
+        // Initialize Site Selector Component
+        this.siteSelector = new SiteSelectorComponent(this.graphAPI, this.azureStorage, this.config);
+        await this.siteSelector.render('folderPermsSiteSelector', {
+            mode: 'single',
+            showDefaultOption: true,
+            placeholder: 'Επιλέξτε Site',
+            onSelectionChange: async (sites, isDefault) => {
+                if (sites && sites.length > 0) {
+                    await this.loadFolderPermissions(sites[0]);
+                }
+            }
+        });
+
         this._attachEventListeners();
     }
 
@@ -87,11 +97,6 @@ class FolderPermissionsComponent {
      * Attach event listeners
      */
     _attachEventListeners() {
-        // Site selector
-        const siteSelector = document.getElementById('folderSiteSelector');
-        siteSelector?.addEventListener('change', (e) => {
-            this.loadFolderPermissions(e.target.value);
-        });
 
         // Show only unique checkbox
         document.getElementById('showOnlyUnique')?.addEventListener('change', (e) => {
