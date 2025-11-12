@@ -91,10 +91,20 @@ class SharedFoldersComponent {
 
         this.currentSite = siteUrl;
         showLoading('Φόρτωση κοινόχρηστων φακέλων...');
+        
+        // Timeout protection
+        const timeoutId = setTimeout(() => {
+            console.error('Shared folders loading timeout');
+            hideLoading();
+            showNotification('Η φόρτωση πήρε πολύ ώρα', 'error');
+        }, 45000);
 
         try {
+            console.log(`Loading shared folders for: ${siteUrl}`);
+            
             // Get all folders with unique permissions
             const allFolders = await this.spAPI.getAllFoldersWithUniquePermissions(siteUrl);
+            console.log(`Found ${allFolders.length} folders with unique permissions`);
             
             // Filter folders that have sharing links
             this.sharedFolders = [];
@@ -116,12 +126,15 @@ class SharedFoldersComponent {
             
             this._renderSharedFoldersList();
             
+            clearTimeout(timeoutId);
             hideLoading();
             showNotification(`Βρέθηκαν ${this.sharedFolders.length} κοινόχρηστοι φάκελοι`, 'success');
+            console.log('✅ Shared folders loaded successfully');
         } catch (error) {
+            clearTimeout(timeoutId);
             hideLoading();
-            console.error('Failed to load shared folders', error);
-            showNotification('Αποτυχία φόρτωσης κοινόχρηστων φακέλων', 'error');
+            console.error('❌ Failed to load shared folders', error);
+            showNotification('Αποτυχία φόρτωσης κοινόχρηστων φακέλων: ' + error.message, 'error');
             
             document.getElementById('sharedFoldersListContainer').innerHTML = `
                 <div class="alert alert-danger">

@@ -156,12 +156,21 @@ class SitePermissionsComponent {
      */
     async _loadMultiSitePermissions(siteUrls) {
         showLoading('Φόρτωση δικαιωμάτων από πολλά sites...');
+        
+        // Timeout protection
+        const timeoutId = setTimeout(() => {
+            console.error('Multi-site loading timeout');
+            hideLoading();
+            showNotification('Η φόρτωση πήρε πολύ ώρα', 'error');
+        }, 60000); // 60 seconds για πολλά sites
 
         try {
             const allPermissions = [];
+            let successCount = 0;
 
             for (const siteUrl of siteUrls) {
                 try {
+                    console.log(`Loading permissions for: ${this._getSiteName(siteUrl)}`);
                     const roleAssignments = await this.spAPI.getSitePermissions(siteUrl);
                     const processed = await this._processPermissions(roleAssignments, siteUrl);
                     
@@ -172,8 +181,10 @@ class SitePermissionsComponent {
                     });
 
                     allPermissions.push(...processed);
+                    successCount++;
                 } catch (error) {
                     console.error(`Failed to load permissions for ${siteUrl}`, error);
+                    // Συνεχίζουμε με τα υπόλοιπα sites
                 }
             }
 
@@ -183,11 +194,16 @@ class SitePermissionsComponent {
             this._sortPermissions();
             this._renderTable();
             
+            clearTimeout(timeoutId);
             hideLoading();
-            showNotification(`Φορτώθηκαν ${this.permissions.length} εγγραφές από ${siteUrls.length} sites`, 'success');
+            showNotification(`Φορτώθηκαν ${this.permissions.length} εγγραφές από ${successCount}/${siteUrls.length} sites`, 'success');
+            
+            console.log(`✅ Multi-site loading complete: ${successCount}/${siteUrls.length} sites`);
         } catch (error) {
+            clearTimeout(timeoutId);
             hideLoading();
-            console.error('Failed to load multi-site permissions', error);
+            
+            console.error('❌ Failed to load multi-site permissions', error);
             showNotification('Αποτυχία φόρτωσης δικαιωμάτων', 'error');
             
             document.getElementById('sitePermissionsTable').innerHTML = `
@@ -203,19 +219,38 @@ class SitePermissionsComponent {
      * Load site permissions
      */
     async loadSitePermissions(siteUrl) {
-        if (!siteUrl) return;
+        if (!siteUrl) {
+            console.warn('No site URL provided');
+            return;
+        }
 
         this.currentSite = siteUrl;
+        
+        // Show loading with timeout protection
         showLoading('Φόρτωση δικαιωμάτων...');
+        
+        // Timeout protection - force hide loading after 30 seconds
+        const timeoutId = setTimeout(() => {
+            console.error('Loading timeout - forcing hideLoading()');
+            hideLoading();
+            showNotification('Η φόρτωση πήρε πολύ ώρα. Δοκιμάστε ξανά.', 'error');
+        }, 30000);
 
         try {
+            console.log(`Loading permissions for: ${siteUrl}`);
+            
             // Get site info
+            console.log('Getting site info...');
             const siteInfo = await this.spAPI.getSiteInfo(siteUrl);
+            console.log('Site info loaded:', siteInfo.d?.Title);
             
             // Get permissions
+            console.log('Getting site permissions...');
             const roleAssignments = await this.spAPI.getSitePermissions(siteUrl);
+            console.log(`Loaded ${roleAssignments.length} role assignments`);
             
             // Process permissions
+            console.log('Processing permissions...');
             this.permissions = await this._processPermissions(roleAssignments, siteUrl);
             this.filteredPermissions = [...this.permissions];
             
@@ -223,17 +258,34 @@ class SitePermissionsComponent {
             this._sortPermissions();
             this._renderTable();
             
+            // Clear timeout and hide loading
+            clearTimeout(timeoutId);
             hideLoading();
             showNotification(`Φορτώθηκαν ${this.permissions.length} εγγραφές`, 'success');
+            
+            console.log('✅ Permissions loaded successfully');
         } catch (error) {
+            // Clear timeout and hide loading
+            clearTimeout(timeoutId);
             hideLoading();
-            console.error('Failed to load site permissions', error);
-            showNotification('Αποτυχία φόρτωσης δικαιωμάτων', 'error');
+            
+            console.error('❌ Failed to load site permissions', error);
+            showNotification('Αποτυχία φόρτωσης δικαιωμάτων: ' + error.message, 'error');
             
             document.getElementById('sitePermissionsTable').innerHTML = `
                 <div class="alert alert-danger">
                     <i class="bi ${ICONS.error}"></i>
-                    Αποτυχία φόρτωσης δικαιωμάτων: ${error.message}
+                    <strong>Αποτυχία φόρτωσης δικαιωμάτων</strong><br>
+                    <small>${error.message}</small>
+                    <hr>
+                    <small class="text-muted">
+                        Πιθανές αιτίες:<br>
+                        • Δεν έχετε δικαιώματα στο site<br>
+                        • Το site URL είναι λάθος<br>
+                        • Το SharePoint API έχει πρόβλημα<br>
+                        <br>
+                        Ελέγξτε το Console (F12) για περισσότερες λεπτομέρειες.
+                    </small>
                 </div>
             `;
         }

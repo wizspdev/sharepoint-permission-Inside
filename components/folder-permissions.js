@@ -127,26 +127,40 @@ class FolderPermissionsComponent {
 
         this.currentSite = siteUrl;
         showLoading('Φόρτωση φακέλων...');
+        
+        // Timeout protection
+        const timeoutId = setTimeout(() => {
+            console.error('Folder loading timeout');
+            hideLoading();
+            showNotification('Η φόρτωση πήρε πολύ ώρα', 'error');
+        }, 45000); // 45 seconds
 
         try {
+            console.log(`Loading folders for: ${siteUrl}`);
+            
             // Get all folders with unique permissions
             const foldersWithUniquePerms = await this.spAPI.getAllFoldersWithUniquePermissions(siteUrl);
+            console.log(`Found ${foldersWithUniquePerms.length} folders with unique permissions`);
             
             // Process folders
             this.folders = await this._processFolders(foldersWithUniquePerms, siteUrl);
             this._filterFolders();
             
+            clearTimeout(timeoutId);
             hideLoading();
             showNotification(`Βρέθηκαν ${this.folders.length} φάκελοι`, 'success');
+            console.log('✅ Folders loaded successfully');
         } catch (error) {
+            clearTimeout(timeoutId);
             hideLoading();
-            console.error('Failed to load folder permissions', error);
-            showNotification('Αποτυχία φόρτωσης φακέλων', 'error');
+            console.error('❌ Failed to load folder permissions', error);
+            showNotification('Αποτυχία φόρτωσης φακέλων: ' + error.message, 'error');
             
             document.getElementById('foldersListContainer').innerHTML = `
                 <div class="alert alert-danger">
                     <i class="bi ${ICONS.error}"></i>
-                    Αποτυχία φόρτωσης φακέλων: ${error.message}
+                    <strong>Αποτυχία φόρτωσης φακέλων</strong><br>
+                    <small>${error.message}</small>
                 </div>
             `;
         }
