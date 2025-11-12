@@ -155,7 +155,13 @@ class AzureStorageClient {
                 }
             });
 
-            if (!response.ok && response.status !== 404) {
+            // 404 is OK - entity doesn't exist (already deleted or never existed)
+            if (response.status === 404) {
+                this.logInfo(`Entity ${rowKey} not found (404) - treating as success`);
+                return true;
+            }
+
+            if (!response.ok) {
                 const errorText = await response.text();
                 throw new Error(`Azure Storage DELETE failed: ${response.status} - ${errorText}`);
             }
@@ -165,6 +171,12 @@ class AzureStorageClient {
 
             return true;
         } catch (error) {
+            // If it's a 404 in the catch, also treat as success
+            if (error.message && error.message.includes('404')) {
+                this.logInfo('Entity not found (404) - treating as success');
+                return true;
+            }
+            
             this.logError('DELETE request failed', error);
             throw error;
         }
@@ -218,22 +230,42 @@ class AzureStorageClient {
         }
 
         try {
+            // Clear cache πρώτα για fresh data
+            this.clearCache();
+            
             // Διαγράφουμε όλα τα υπάρχοντα
             const existingSites = await this.getDefaultSites();
+            this.logInfo(`Found ${existingSites.length} existing sites to delete`);
+            
             for (const site of existingSites) {
-                await this.deleteEntity(site.rowKey);
-            }
-
-            // Προσθέτουμε τα νέα
-            for (const site of sites) {
-                // If site is just a URL string, convert to object
-                const siteUrl = typeof site === 'string' ? site : (site.url || site.SiteUrl);
-                if (siteUrl) {
-                    await this.addDefaultSite(siteUrl);
+                try {
+                    await this.deleteEntity(site.rowKey);
+                    this.logInfo(`Deleted: ${site.name}`);
+                } catch (delError) {
+                    // Ignore 404 errors - entity δεν υπάρχει, οπότε είναι OK
+                    if (!delError.message.includes('404')) {
+                        this.logWarn(`Failed to delete ${site.name}:`, delError);
+                    }
                 }
             }
 
-            this.logInfo(`Saved ${sites.length} default sites to Azure Storage`);
+            // Προσθέτουμε τα νέα
+            let successCount = 0;
+            for (const site of sites) {
+                try {
+                    // If site is just a URL string, convert to object
+                    const siteUrl = typeof site === 'string' ? site : (site.url || site.SiteUrl);
+                    if (siteUrl) {
+                        await this.addDefaultSite(siteUrl);
+                        successCount++;
+                    }
+                } catch (addError) {
+                    this.logWarn(`Failed to add site:`, addError);
+                    // Continue με τα υπόλοιπα
+                }
+            }
+
+            this.logInfo(`Saved ${successCount}/${sites.length} default sites to Azure Storage`);
             return true;
         } catch (error) {
             this.logError('Failed to save default sites', error);
@@ -292,11 +324,20 @@ class AzureStorageClient {
 
         try {
             const rowKey = this.generateRowKey(siteUrl);
-            await this.deleteEntity(rowKey);
-            this.logInfo(`Removed site from defaults: ${siteUrl}`);
+            const result = await this.deleteEntity(rowKey);
+            
+            if (result) {
+                this.logInfo(`Removed site from defaults: ${siteUrl}`);
+            }
             
             return true;
         } catch (error) {
+            // If it's a 404, treat as success (already deleted)
+            if (error.message && error.message.includes('404')) {
+                this.logInfo(`Site already removed: ${siteUrl}`);
+                return true;
+            }
+            
             this.logError('Failed to remove default site', error);
             throw error;
         }
