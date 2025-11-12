@@ -57,7 +57,7 @@ const CONFIG = {
         // Τα sites που θέλετε να παρακολουθείτε
         // Προσθέστε/αφαιρέστε sites όπως χρειάζεται
         monitoredSites: [
-            'https://wiz365.sharepoint.com/sites/CRM'
+            'https://wiz365.sharepoint.com'
         ],
 
         // API Version
