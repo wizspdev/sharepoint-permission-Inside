@@ -350,12 +350,12 @@ class SitePermissionsComponent {
                             <th class="sortable" data-column="email">
                                 Email <i class="bi ${this._getSortIcon('email')}"></i>
                             </th>
-                            ${this.isMultiSite ? '<th class="sortable" data-column="siteName">Site <i class="bi ' + this._getSortIcon('siteName') + '"></i></th>' : ''}
+                            ${this.isMultiSite ? this._renderSiteFilterHeader() : ''}
                             <th>Δικαιώματα</th>
                             <th>Ενέργειες</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="sitePermissionsTableBody">
         `;
 
         for (const perm of paginated.data) {
@@ -472,10 +472,52 @@ class SitePermissionsComponent {
             });
         });
 
+        // Site filter dropdown (multi-site mode)
+        const siteFilterDropdown = document.getElementById('sitePermsSiteFilterDropdown');
+        if (siteFilterDropdown) {
+            siteFilterDropdown.addEventListener('change', (e) => {
+                this._filterPermissionsBySite(e.target.value);
+            });
+        }
+
         // Add button
         document.getElementById('addSitePermBtn')?.addEventListener('click', () => {
             this._addPermission();
         });
+    }
+
+    /**
+     * Filter permissions table by site
+     */
+    _filterPermissionsBySite(siteUrl) {
+        const tableBody = document.getElementById('sitePermissionsTableBody');
+        if (!tableBody) return;
+
+        const rows = tableBody.querySelectorAll('tr');
+        
+        if (!siteUrl) {
+            // Show all
+            rows.forEach(row => row.style.display = '');
+            console.log('Showing all permissions');
+            return;
+        }
+
+        // Filter by site
+        let visibleCount = 0;
+        this.permissions.forEach((perm, index) => {
+            const row = rows[index];
+            if (row) {
+                const permSiteUrl = perm.siteUrl || perm.siteName;
+                if (permSiteUrl === siteUrl) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            }
+        });
+
+        console.log(`Filtered to ${visibleCount} permissions from ${this._extractSiteName(siteUrl)}`);
     }
 
     /**
@@ -664,6 +706,53 @@ class SitePermissionsComponent {
     _getSortIcon(column) {
         if (this.sortColumn !== column) return 'bi-arrow-down-up';
         return this.sortAscending ? 'bi-arrow-up' : 'bi-arrow-down';
+    }
+
+    /**
+     * Render site filter header για multi-site mode
+     */
+    _renderSiteFilterHeader() {
+        // Get unique sites από τα current permissions
+        const uniqueSites = [...new Set(this.permissions.map(p => p.siteUrl || p.siteName))].filter(s => s);
+        
+        if (uniqueSites.length <= 1) {
+            // Fallback to simple header
+            return '<th class="sortable" data-column="siteName">Site <i class="bi ' + this._getSortIcon('siteName') + '"></i></th>';
+        }
+
+        // Build dropdown options
+        const options = uniqueSites.map(siteUrl => {
+            const siteName = this._extractSiteName(siteUrl);
+            const count = this.permissions.filter(p => (p.siteUrl || p.siteName) === siteUrl).length;
+            return `<option value="${escapeHtml(siteUrl)}">${escapeHtml(siteName)} (${count})</option>`;
+        }).join('');
+
+        return `
+            <th class="sortable" data-column="siteName">
+                Site <i class="bi ${this._getSortIcon('siteName')}"></i>
+                <select id="sitePermsSiteFilterDropdown" class="form-select form-select-sm mt-1">
+                    <option value="">Όλα (${this.permissions.length})</option>
+                    ${options}
+                </select>
+            </th>
+        `;
+    }
+
+    /**
+     * Helper: Extract site name from URL
+     */
+    _extractSiteName(siteUrl) {
+        if (!siteUrl) return 'N/A';
+        try {
+            const url = new URL(siteUrl);
+            const pathParts = url.pathname.split('/').filter(p => p);
+            if (pathParts.length === 0) {
+                return url.hostname.split('.')[0];
+            }
+            return pathParts[pathParts.length - 1];
+        } catch {
+            return siteUrl;
+        }
     }
 
     /**
