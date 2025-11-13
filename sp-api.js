@@ -350,6 +350,20 @@ class SharePointAPI {
     }
 
     /**
+     * Παίρνει permissions για ένα συγκεκριμένο list
+     */
+    async getListPermissions(siteUrl, listId) {
+        const url = `${siteUrl}/_api/web/lists(guid'${listId}')/RoleAssignments?$expand=Member,RoleDefinitionBindings`;
+        try {
+            const data = await this.get(url);
+            return data.d.results;
+        } catch (error) {
+            this.logError(`Failed to get list permissions for ${listId}`, error);
+            return [];
+        }
+    }
+
+    /**
      * Αναζητά όλους τους folders με unique permissions σε ένα site
      */
     async getAllFoldersWithUniquePermissions(siteUrl) {

@@ -76,15 +76,15 @@
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="folders-tab" data-bs-toggle="tab" 
-                            data-bs-target="#folders-panel" type="button" role="tab">
-                        <i class="bi bi-folder"></i> Φάκελοι
+                    <button class="nav-link" id="folders-combined-tab" data-bs-toggle="tab" 
+                            data-bs-target="#folders-combined-panel" type="button" role="tab">
+                        <i class="bi bi-folder"></i> Φάκελοι & Κοινόχρηστοι
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="shared-tab" data-bs-toggle="tab" 
-                            data-bs-target="#shared-panel" type="button" role="tab">
-                        <i class="bi bi-folder-share"></i> Κοινόχρηστοι Φάκελοι
+                    <button class="nav-link" id="doc-libraries-tab" data-bs-toggle="tab" 
+                            data-bs-target="#doc-libraries-panel" type="button" role="tab">
+                        <i class="bi bi-journal-text"></i> Document Libraries
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
@@ -108,14 +108,14 @@
                     <!-- Content will be rendered by SitePermissionsComponent -->
                 </div>
 
-                <!-- Folders Tab -->
-                <div class="tab-pane fade" id="folders-panel" role="tabpanel">
-                    <!-- Content will be rendered by FolderPermissionsComponent -->
+                <!-- Folders Combined Tab (Φάκελοι + Κοινόχρηστοι) -->
+                <div class="tab-pane fade" id="folders-combined-panel" role="tabpanel">
+                    <!-- Content will be rendered by FoldersCombinedComponent -->
                 </div>
 
-                <!-- Shared Folders Tab -->
-                <div class="tab-pane fade" id="shared-panel" role="tabpanel">
-                    <!-- Content will be rendered by SharedFoldersComponent -->
+                <!-- Document Libraries Tab -->
+                <div class="tab-pane fade" id="doc-libraries-panel" role="tabpanel">
+                    <!-- Content will be rendered by DocumentLibrariesComponent -->
                 </div>
 
                 <!-- User Lookup Tab -->
@@ -174,8 +174,8 @@
     <script src="components/permission-modal.js"></script>
     <script src="components/group-members-modal.js"></script>
     <script src="components/site-permissions.js"></script>
-    <script src="components/folder-permissions.js"></script>
-    <script src="components/shared-folders.js"></script>
+    <script src="components/folders-combined.js"></script>
+    <script src="components/document-libraries.js"></script>
     <script src="components/user-permissions-lookup.js"></script>
     <script src="components/settings.js"></script>
     

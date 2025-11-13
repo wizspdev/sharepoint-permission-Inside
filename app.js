@@ -112,25 +112,23 @@ class SharePointPermissionsApp {
             );
             await this.components.sitePermissions.render();
 
-            // Folder Permissions Component
-            this.components.folderPermissions = new FolderPermissionsComponent(
-                document.getElementById('folders-panel'),
+            // Folders Combined Component (Φάκελοι + Κοινόχρηστοι merged)
+            this.components.foldersCombined = new FoldersCombinedComponent(
+                document.getElementById('folders-combined-panel'),
                 this.spAPI,
                 this.graphAPI,
-                CONFIG,
-                this.azureStorage
+                CONFIG
             );
-            await this.components.folderPermissions.render();
+            await this.components.foldersCombined.render();
 
-            // Shared Folders Component
-            this.components.sharedFolders = new SharedFoldersComponent(
-                document.getElementById('shared-panel'),
+            // Document Libraries Component (NEW!)
+            this.components.docLibraries = new DocumentLibrariesComponent(
+                document.getElementById('doc-libraries-panel'),
                 this.spAPI,
                 this.graphAPI,
-                CONFIG,
-                this.azureStorage
+                CONFIG
             );
-            await this.components.sharedFolders.render();
+            await this.components.docLibraries.render();
 
             // User Permissions Lookup Component
             this.components.userLookup = new UserPermissionsLookupComponent(
@@ -217,19 +215,11 @@ class SharePointPermissionsApp {
                         );
                     }
                     break;
-                case 'folders-panel':
-                    if (this.components.folderPermissions.currentSite) {
-                        await this.components.folderPermissions.loadFolderPermissions(
-                            this.components.folderPermissions.currentSite
-                        );
-                    }
+                case 'folders-combined-panel':
+                    // Folders Combined - no auto refresh needed (has its own refresh button)
                     break;
-                case 'shared-panel':
-                    if (this.components.sharedFolders.currentSite) {
-                        await this.components.sharedFolders.loadSharedFolders(
-                            this.components.sharedFolders.currentSite
-                        );
-                    }
+                case 'doc-libraries-panel':
+                    // Document Libraries - no auto refresh needed (has its own refresh button)
                     break;
                 case 'user-lookup-panel':
                     if (this.components.userLookup.currentUser) {
