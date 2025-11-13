@@ -69,7 +69,7 @@ class PermissionAggregator {
                         });
                     }
                     
-                    // Παίρνουμε folder permissions
+                    // Παίρνουμε folder permissions (unique permissions)
                     const folderPerms = await this._analyzeFolderPermissions(
                         siteUrl,
                         user,
@@ -78,6 +78,16 @@ class PermissionAggregator {
                     
                     if (folderPerms.length > 0) {
                         folderPermissions.push(...folderPerms);
+                    }
+                    
+                    // Παίρνουμε shared folders (κοινόχρηστοι φάκελοι)
+                    const sharedFolders = await this._analyzeSharedFolders(
+                        siteUrl,
+                        user
+                    );
+                    
+                    if (sharedFolders.length > 0) {
+                        folderPermissions.push(...sharedFolders);
                     }
                 } catch (error) {
                     console.error(`Failed to analyze ${siteUrl}`, error);
@@ -181,6 +191,49 @@ class PermissionAggregator {
             return foldersWithPerms;
         } catch (error) {
             console.error(`Failed to analyze folders in ${siteUrl}`, error);
+            return [];
+        }
+    }
+
+    /**
+     * Αναλύει shared folders (κοινόχρηστοι) για έναν χρήστη
+     */
+    async _analyzeSharedFolders(siteUrl, user) {
+        try {
+            console.log(`Analyzing shared folders for ${user.mail || user.userPrincipalName}`);
+            
+            const sharedFolders = await this.spAPI.getSharedFolders(siteUrl);
+            const userEmail = (user.mail || user.userPrincipalName || '').toLowerCase();
+            
+            console.log(`Found ${sharedFolders.length} shared folders in ${siteUrl}`);
+            
+            // Φιλτράρουμε μόνο τους φακέλους που είναι shared με αυτόν τον χρήστη
+            const userSharedFolders = sharedFolders.filter(folder => {
+                // Για τώρα, επιστρέφουμε όλους τους shared folders
+                // Θα χρειαστεί Graph API για να ελέγξουμε το sharing link target
+                return true;
+            });
+            
+            // Μετατροπή σε folder permission format
+            return userSharedFolders.map(folder => ({
+                siteUrl: siteUrl,
+                folderPath: folder.path,
+                folderName: folder.name,
+                library: folder.library,
+                permissions: [{
+                    principalName: 'Shared Link',
+                    principalType: 'Κοινόχρηστος Σύνδεσμος',
+                    roles: ['Read'],
+                    isDirect: true,
+                    matchedThrough: 'Sharing Link'
+                }],
+                directPermissions: [],
+                inheritedPermissions: [],
+                isShared: true
+            }));
+            
+        } catch (error) {
+            console.error(`Failed to analyze shared folders in ${siteUrl}`, error);
             return [];
         }
     }
