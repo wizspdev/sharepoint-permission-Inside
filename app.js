@@ -117,7 +117,8 @@ class SharePointPermissionsApp {
                 document.getElementById('folders-combined-panel'),
                 this.spAPI,
                 this.graphAPI,
-                CONFIG
+                CONFIG,
+                this.azureStorage
             );
             await this.components.foldersCombined.render();
 
@@ -126,7 +127,8 @@ class SharePointPermissionsApp {
                 document.getElementById('doc-libraries-panel'),
                 this.spAPI,
                 this.graphAPI,
-                CONFIG
+                CONFIG,
+                this.azureStorage
             );
             await this.components.docLibraries.render();
 

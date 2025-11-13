@@ -5,11 +5,12 @@
  */
 
 class DocumentLibrariesComponent {
-    constructor(container, spAPI, graphAPI, config) {
+    constructor(container, spAPI, graphAPI, config, azureStorage) {
         this.container = container;
         this.spAPI = spAPI;
         this.graphAPI = graphAPI;
         this.config = config;
+        this.azureStorage = azureStorage;
         
         this.selectedSites = [];
         this.libraries = [];
@@ -43,7 +44,7 @@ class DocumentLibrariesComponent {
         `;
 
         // Initialize Site Selector με Προεπιλεγμένα option
-        this.siteSelector = new SiteSelectorComponent(this.graphAPI, this.azureStorage || null, this.config);
+        this.siteSelector = new SiteSelectorComponent(this.graphAPI, this.azureStorage, this.config);
         await this.siteSelector.render('docLibSiteSelector', {
             mode: 'multi',
             showDefaultOption: true,
