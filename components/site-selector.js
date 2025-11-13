@@ -267,21 +267,39 @@ class SiteSelectorComponent {
         const searchDropdown = document.getElementById(`${this.containerId}_search_dropdown`);
         const searchInput = document.getElementById(`${this.containerId}_search_input`);
 
+        if (!dropdown) {
+            console.error(`Dropdown ${this.containerId}_dropdown not found!`);
+            return;
+        }
+
         // Dropdown change
-        dropdown?.addEventListener('change', async (e) => {
+        dropdown.addEventListener('change', async (e) => {
             const value = e.target.value;
+            console.log(`[SiteSelector] Dropdown changed to: ${value}`);
             
             if (value === '__DEFAULT__') {
                 // Επιλογή προεπιλεγμένων sites
                 this.selectedSites = this.defaultSites.map(s => s.url);
+                console.log(`[SiteSelector] Selected DEFAULT sites:`, this.selectedSites);
             } else if (value) {
                 this.selectedSites = [value];
+                console.log(`[SiteSelector] Selected site: ${value}`);
             } else {
                 this.selectedSites = [];
+                console.log(`[SiteSelector] No site selected`);
             }
 
+            // Call callback
             if (this.onSelectionChange) {
-                await this.onSelectionChange(this.selectedSites, value === '__DEFAULT__');
+                console.log(`[SiteSelector] Calling onSelectionChange callback...`);
+                try {
+                    await this.onSelectionChange(this.selectedSites, value === '__DEFAULT__');
+                    console.log(`[SiteSelector] Callback completed successfully`);
+                } catch (callbackError) {
+                    console.error(`[SiteSelector] Callback error:`, callbackError);
+                }
+            } else {
+                console.warn(`[SiteSelector] No onSelectionChange callback defined!`);
             }
         });
 
