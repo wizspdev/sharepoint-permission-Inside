@@ -223,6 +223,11 @@ class SharePointAPI {
             const data = await this.get(url);
             return data.d.HasUniqueRoleAssignments;
         } catch (error) {
+            // 404 means folder doesn't exist or not accessible - return false instead of throwing
+            if (error.message.includes('404') || error.message.includes('403')) {
+                this.logWarn(`Folder not accessible: ${folderPath}`);
+                return false;
+            }
             this.logError('Failed to check unique permissions', error);
             return false;
         }
@@ -347,32 +352,53 @@ class SharePointAPI {
      * Αναζητά όλους τους folders με unique permissions σε ένα site
      */
     async getAllFoldersWithUniquePermissions(siteUrl) {
-        const lists = await this.getSiteLists(siteUrl);
-        const foldersWithUniquePerms = [];
+        try {
+            const lists = await this.getSiteLists(siteUrl);
+            const foldersWithUniquePerms = [];
 
-        for (const list of lists) {
-            if (list.BaseType === 1) { // Document Library
-                try {
-                    const folders = await this.getFoldersRecursive(siteUrl, list.RootFolder.ServerRelativeUrl);
-                    
-                    for (const folder of folders) {
-                        const hasUnique = await this.hasUniquePermissions(siteUrl, folder.ServerRelativeUrl);
-                        if (hasUnique) {
-                            const permissions = await this.getFolderPermissions(siteUrl, folder.ServerRelativeUrl);
-                            foldersWithUniquePerms.push({
-                                ...folder,
-                                permissions: permissions,
-                                library: list.Title
-                            });
+            this.logInfo(`Checking ${lists.length} lists for unique permissions`);
+
+            for (const list of lists) {
+                if (list.BaseType === 1) { // Document Library
+                    try {
+                        const folders = await this.getFoldersRecursive(siteUrl, list.RootFolder.ServerRelativeUrl);
+                        this.logInfo(`Found ${folders.length} folders in ${list.Title}`);
+                        
+                        for (const folder of folders) {
+                            try {
+                                const hasUnique = await this.hasUniquePermissions(siteUrl, folder.ServerRelativeUrl);
+                                if (hasUnique) {
+                                    try {
+                                        const permissions = await this.getFolderPermissions(siteUrl, folder.ServerRelativeUrl);
+                                        if (permissions) {
+                                            foldersWithUniquePerms.push({
+                                                ...folder,
+                                                permissions: permissions,
+                                                library: list.Title
+                                            });
+                                        }
+                                    } catch (permErr) {
+                                        this.logWarn(`Failed to get permissions for ${folder.Name}`, permErr);
+                                    }
+                                }
+                            } catch (uniqueErr) {
+                                // Skip folders that error on hasUniquePermissions check
+                                this.logWarn(`Skipping folder ${folder.Name}`, uniqueErr.message);
+                            }
                         }
+                    } catch (error) {
+                        this.logWarn(`Failed to process library ${list.Title}`, error);
                     }
-                } catch (error) {
-                    this.logWarn(`Failed to process library ${list.Title}`, error);
                 }
             }
-        }
 
-        return foldersWithUniquePerms;
+            this.logInfo(`Found ${foldersWithUniquePerms.length} folders with unique permissions`);
+            return foldersWithUniquePerms;
+        } catch (error) {
+            this.logError('Failed to get folders with unique permissions', error);
+            // Return empty array instead of throwing - graceful degradation
+            return [];
+        }
     }
 
     /**
