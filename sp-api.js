@@ -365,56 +365,20 @@ class SharePointAPI {
 
     /**
      * Παίρνει shared folders (κοινόχρηστοι με sharing links)
+     * Simplified approach - returns empty for now
+     * TODO: Implement with Graph API for better performance
      */
     async getSharedFolders(siteUrl) {
         try {
-            console.log(`Getting shared folders for: ${siteUrl}`);
+            console.log(`[SharePointAPI] Getting shared folders for: ${siteUrl}`);
+            console.warn(`[SharePointAPI] Shared folders detection is limited - requires Graph API implementation`);
             
-            const lists = await this.getSiteLists(siteUrl);
-            const sharedItems = [];
-
-            // Λίστες που αγνοούμε
-            const excludedLists = [
-                'Form Templates', 'Site Assets', 'Style Library', 'Site Pages',
-                'Site Collection Documents', 'Site Collection Images', 'Pages',
-                'wizsp', 'WIZSP'
-            ];
-
-            for (const list of lists) {
-                if (list.BaseType === 1 && !excludedLists.includes(list.Title)) { // Document Library
-                    try {
-                        // Παίρνουμε items με sharing links
-                        const url = `${siteUrl}/_api/web/lists(guid'${list.Id}')/items?$select=Id,FileRef,FileLeafRef,FSObjType,FileSystemObjectType,SharingInformation&$filter=SharingInformation ne null&$top=100`;
-                        
-                        try {
-                            const data = await this.get(url);
-                            if (data.d && data.d.results) {
-                                data.d.results.forEach(item => {
-                                    // FSObjType: 1 = Folder, 0 = File
-                                    if (item.FileSystemObjectType === 1 || item.FSObjType === 1) {
-                                        sharedItems.push({
-                                            name: item.FileLeafRef,
-                                            path: item.FileRef,
-                                            siteUrl: siteUrl,
-                                            library: list.Title,
-                                            isFolder: true,
-                                            sharingInfo: item.SharingInformation
-                                        });
-                                    }
-                                });
-                            }
-                        } catch (err) {
-                            // SharingInformation field may not be available, try alternative approach
-                            console.warn(`Cannot get sharing info for ${list.Title}, trying alternative method`);
-                        }
-                    } catch (error) {
-                        this.logWarn(`Failed to get shared items from ${list.Title}`, error);
-                    }
-                }
-            }
-
-            this.logInfo(`Found ${sharedItems.length} shared folders`);
-            return sharedItems;
+            // Temporary: Return empty array
+            // Full implementation needs Graph API: /sites/{site-id}/drive/sharedWithMe
+            // Or: /sites/{site-id}/drive/items/{item-id}/permissions
+            
+            this.logInfo(`Shared folders detection: Not fully implemented yet`);
+            return [];
             
         } catch (error) {
             this.logError('Failed to get shared folders', error);

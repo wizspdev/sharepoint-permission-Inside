@@ -441,6 +441,32 @@ class GraphAPI {
     }
 
     /**
+     * Παίρνει shared items for a user
+     */
+    async getSharedWithUser(userEmail) {
+        try {
+            // Get user first
+            const user = await this.getUserByEmail(userEmail);
+            
+            // Get items shared with user
+            const url = `/users/${user.id}/drive/sharedWithMe`;
+            const result = await this.get(url);
+            
+            // Filter only folders
+            const sharedFolders = (result.value || []).filter(item => {
+                return item.folder !== undefined; // Has folder property = is a folder
+            });
+            
+            console.log(`[GraphAPI] Found ${sharedFolders.length} folders shared with ${userEmail}`);
+            
+            return sharedFolders;
+        } catch (error) {
+            this.logError(`Failed to get shared items for ${userEmail}`, error);
+            return [];
+        }
+    }
+
+    /**
      * Παίρνει τα groups ενός χρήστη
      */
     async getUserGroups(userId) {

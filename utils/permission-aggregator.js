@@ -197,44 +197,72 @@ class PermissionAggregator {
 
     /**
      * Αναλύει shared folders (κοινόχρηστοι) για έναν χρήστη
+     * Uses Graph API για πιο accurate detection
      */
     async _analyzeSharedFolders(siteUrl, user) {
         try {
-            console.log(`Analyzing shared folders for ${user.mail || user.userPrincipalName}`);
+            const userEmail = user.mail || user.userPrincipalName;
+            console.log(`Analyzing shared folders for ${userEmail} using Graph API`);
             
-            const sharedFolders = await this.spAPI.getSharedFolders(siteUrl);
-            const userEmail = (user.mail || user.userPrincipalName || '').toLowerCase();
+            // Παίρνουμε όλα τα shared items από Graph API
+            const allSharedItems = await this.graphAPI.getSharedWithUser(userEmail);
             
-            console.log(`Found ${sharedFolders.length} shared folders in ${siteUrl}`);
+            console.log(`Found ${allSharedItems.length} shared folders (Graph API)`);
             
-            // Φιλτράρουμε μόνο τους φακέλους που είναι shared με αυτόν τον χρήστη
-            const userSharedFolders = sharedFolders.filter(folder => {
-                // Για τώρα, επιστρέφουμε όλους τους shared folders
-                // Θα χρειαστεί Graph API για να ελέγξουμε το sharing link target
-                return true;
+            // Φιλτράρουμε μόνο items από το συγκεκριμένο site
+            const siteSharedFolders = allSharedItems.filter(item => {
+                // Check if item belongs to this site
+                const itemUrl = item.webUrl || '';
+                return itemUrl.includes(siteUrl) || itemUrl.toLowerCase().includes(siteUrl.toLowerCase());
             });
             
+            console.log(`Filtered to ${siteSharedFolders.length} shared folders from ${siteUrl}`);
+            
             // Μετατροπή σε folder permission format
-            return userSharedFolders.map(folder => ({
-                siteUrl: siteUrl,
-                folderPath: folder.path,
-                folderName: folder.name,
-                library: folder.library,
-                permissions: [{
-                    principalName: 'Shared Link',
-                    principalType: 'Κοινόχρηστος Σύνδεσμος',
-                    roles: ['Read'],
-                    isDirect: true,
-                    matchedThrough: 'Sharing Link'
-                }],
-                directPermissions: [],
-                inheritedPermissions: [],
-                isShared: true
-            }));
+            return siteSharedFolders.map(item => {
+                // Extract library name από το path
+                const library = this._extractLibraryFromPath(item.parentReference?.path);
+                
+                return {
+                    siteUrl: siteUrl,
+                    folderPath: item.parentReference?.path || item.webUrl,
+                    folderName: item.name,
+                    library: library,
+                    permissions: [{
+                        principalName: 'Shared Link',
+                        principalType: 'Κοινόχρηστος Σύνδεσμος',
+                        roles: ['Read'],
+                        isDirect: true,
+                        matchedThrough: 'Sharing Link'
+                    }],
+                    directPermissions: [],
+                    inheritedPermissions: [],
+                    isShared: true,
+                    sharedBy: item.remoteItem?.shared?.sharedBy?.user?.displayName || 'Unknown'
+                };
+            });
             
         } catch (error) {
             console.error(`Failed to analyze shared folders in ${siteUrl}`, error);
             return [];
+        }
+    }
+    
+    /**
+     * Helper: Extract library name από path
+     */
+    _extractLibraryFromPath(path) {
+        if (!path) return 'Unknown';
+        try {
+            const parts = path.split('/').filter(p => p);
+            // Typical path: /drive/root:/Documents/folder1
+            if (parts.includes('root:')) {
+                const afterRoot = parts[parts.indexOf('root:') + 1];
+                return afterRoot || 'Documents';
+            }
+            return parts[parts.length - 1] || 'Unknown';
+        } catch {
+            return 'Unknown';
         }
     }
 
