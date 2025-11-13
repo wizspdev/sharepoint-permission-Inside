@@ -389,7 +389,8 @@ class SharePointAPI {
                                             foldersWithUniquePerms.push({
                                                 ...folder,
                                                 permissions: permissions,
-                                                library: list.Title
+                                                library: list.Title,
+                                                hasUniquePermissions: true
                                             });
                                         }
                                     } catch (permErr) {

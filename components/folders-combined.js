@@ -208,15 +208,21 @@ class FoldersCombinedComponent {
             return;
         }
 
+        console.log(`Rendering ${this.uniquePermFolders.length} folders with unique permissions`);
+
         let html = `
             <div class="table-responsive">
                 <table class="table table-hover">
                     <thead>
                         <tr>
+                            <th>
+                                <input type="checkbox" id="selectAllFolders" class="form-check-input">
+                            </th>
                             <th>Φάκελος</th>
                             <th>Library</th>
                             <th>Path</th>
                             <th>Permissions</th>
+                            <th>Unique Perms</th>
                             <th>Ενέργειες</th>
                         </tr>
                     </thead>
@@ -225,9 +231,16 @@ class FoldersCombinedComponent {
 
         for (const folder of this.uniquePermFolders) {
             const permCount = folder.permissions ? folder.permissions.length : 0;
+            const hasUnique = folder.hasUniquePermissions || (permCount > 0);
+            const uniqueBadge = hasUnique 
+                ? '<span class="badge bg-warning"><i class="bi bi-shield-lock"></i> Yes</span>'
+                : '<span class="badge bg-secondary">No</span>';
             
             html += `
                 <tr>
+                    <td>
+                        <input type="checkbox" class="form-check-input folder-checkbox" data-folder-path="${escapeHtml(folder.ServerRelativeUrl)}">
+                    </td>
                     <td>
                         <i class="bi ${ICONS.folder}"></i> <strong>${escapeHtml(folder.Name)}</strong>
                     </td>
@@ -240,6 +253,7 @@ class FoldersCombinedComponent {
                     <td>
                         <span class="badge bg-secondary">${permCount} assignments</span>
                     </td>
+                    <td>${uniqueBadge}</td>
                     <td>
                         <button class="btn btn-sm btn-primary view-folder-perms" data-folder-path="${escapeHtml(folder.ServerRelativeUrl)}">
                             <i class="bi ${ICONS.info}"></i> Δικαιώματα
@@ -443,10 +457,20 @@ class FoldersCombinedComponent {
     }
 
     /**
-     * Filter folders από excluded lists (Form Templates, Site Assets, Style Library, Site Pages)
+     * Filter folders από excluded lists
      */
     _filterExcludedLists(folders) {
-        const excludedLists = ['Form Templates', 'Site Assets', 'Style Library', 'Site Pages'];
+        const excludedLists = [
+            'Form Templates', 
+            'Site Assets', 
+            'Style Library', 
+            'Site Pages',
+            'Site Collection Documents',
+            'Site Collection Images',
+            'Pages',
+            'wizsp',
+            'WIZSP'
+        ];
         return folders.filter(folder => !excludedLists.includes(folder.library));
     }
 }

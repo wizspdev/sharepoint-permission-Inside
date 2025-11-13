@@ -157,8 +157,18 @@ class DocumentLibrariesComponent {
         // Παίρνουμε όλα τα lists
         const allLists = await this.spAPI.getSiteLists(siteUrl);
         
-        // Λίστες που θέλουμε να αγνοήσουμε
-        const excludedLists = ['Form Templates', 'Site Assets', 'Style Library', 'Site Pages'];
+            // Λίστες που θέλουμε να αγνοήσουμε
+            const excludedLists = [
+                'Form Templates', 
+                'Site Assets', 
+                'Style Library', 
+                'Site Pages',
+                'Site Collection Documents',
+                'Site Collection Images',
+                'Pages',
+                'wizsp',
+                'WIZSP'
+            ];
         
         // Φιλτράρουμε μόνο Document Libraries (BaseType = 1) και όχι excluded
         const docLibs = allLists.filter(list => 
