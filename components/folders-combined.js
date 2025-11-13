@@ -68,17 +68,81 @@ class FoldersCombinedComponent {
             </div>
         `;
 
-        // Initialize Site Selector
+        // Initialize Site Selector με Προεπιλεγμένα option
         this.siteSelector = new SiteSelectorComponent(this.graphAPI, this.azureStorage || null, this.config);
         await this.siteSelector.render('foldersCombinedSiteSelector', {
-            mode: 'single',
-            showDefaultOption: false,
+            mode: 'multi',
+            showDefaultOption: true,
             onSelectionChange: async (sites, isDefault) => {
+                console.log('🟢 [FoldersCombined] Site selection changed:', sites);
                 if (sites && sites.length > 0) {
-                    await this.loadAllFolders(sites[0]);
+                    if (sites.length === 1) {
+                        // Single site
+                        await this.loadAllFolders(sites[0]);
+                    } else {
+                        // Multiple sites (Προεπιλεγμένα)
+                        await this.loadAllFoldersMultiSite(sites);
+                    }
                 }
             }
         });
+    }
+
+    /**
+     * Load folders από πολλαπλά sites (Προεπιλεγμένα)
+     */
+    async loadAllFoldersMultiSite(siteUrls) {
+        showLoading(`Φόρτωση φακέλων από ${siteUrls.length} sites...`);
+        
+        // Timeout protection
+        const timeoutId = setTimeout(() => {
+            hideLoading();
+            showNotification('Η φόρτωση πήρε πολύ ώρα', 'error');
+        }, 120000); // 2 minutes for multi-site
+
+        try {
+            console.log(`Loading folders from ${siteUrls.length} sites:`, siteUrls);
+            
+            this.uniquePermFolders = [];
+            this.sharedFolders = [];
+            
+            // Load από όλα τα sites
+            for (const siteUrl of siteUrls) {
+                try {
+                    const [uniquePerms, shared] = await Promise.all([
+                        this.spAPI.getAllFoldersWithUniquePermissions(siteUrl),
+                        this.spAPI.getSharedFolders(siteUrl)
+                    ]);
+                    
+                    // Filter excluded lists
+                    const filteredUniquePerms = this._filterExcludedLists(uniquePerms);
+                    
+                    this.uniquePermFolders.push(...filteredUniquePerms);
+                    this.sharedFolders.push(...shared);
+                } catch (error) {
+                    console.error(`Failed to load folders from ${siteUrl}:`, error);
+                }
+            }
+            
+            clearTimeout(timeoutId);
+            hideLoading();
+            
+            // Update counts
+            document.getElementById('uniquePermsCount').textContent = this.uniquePermFolders.length;
+            document.getElementById('sharedFoldersCount').textContent = this.sharedFolders.length;
+            
+            // Render both tabs
+            this._renderUniquePermFolders();
+            this._renderSharedFolders();
+            
+            showNotification(`Φόρτωση ολοκληρώθηκε: ${this.uniquePermFolders.length} unique, ${this.sharedFolders.length} shared από ${siteUrls.length} sites`, 'success');
+            
+        } catch (error) {
+            clearTimeout(timeoutId);
+            hideLoading();
+            console.error('Failed to load folders:', error);
+            showNotification('Αποτυχία φόρτωσης φακέλων', 'error');
+        }
     }
 
     /**
@@ -102,7 +166,8 @@ class FoldersCombinedComponent {
                 this.spAPI.getSharedFolders(siteUrl)
             ]);
             
-            this.uniquePermFolders = uniquePermFolders;
+            // Filter excluded lists
+            this.uniquePermFolders = this._filterExcludedLists(uniquePermFolders);
             this.sharedFolders = sharedFolders;
             
             clearTimeout(timeoutId);
@@ -374,6 +439,14 @@ class FoldersCombinedComponent {
         `;
 
         return html;
+    }
+
+    /**
+     * Filter folders από excluded lists (Form Templates, Site Assets, Style Library, Site Pages)
+     */
+    _filterExcludedLists(folders) {
+        const excludedLists = ['Form Templates', 'Site Assets', 'Style Library', 'Site Pages'];
+        return folders.filter(folder => !excludedLists.includes(folder.library));
     }
 }
 

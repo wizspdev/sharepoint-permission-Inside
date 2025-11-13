@@ -42,17 +42,73 @@ class DocumentLibrariesComponent {
             </div>
         `;
 
-        // Initialize Site Selector
+        // Initialize Site Selector με Προεπιλεγμένα option
         this.siteSelector = new SiteSelectorComponent(this.graphAPI, this.azureStorage || null, this.config);
         await this.siteSelector.render('docLibSiteSelector', {
-            mode: 'single',
-            showDefaultOption: false,
+            mode: 'multi',
+            showDefaultOption: true,
             onSelectionChange: async (sites, isDefault) => {
+                console.log('🟢 [DocLibraries] Site selection changed:', sites);
                 if (sites && sites.length > 0) {
-                    await this.loadLibraries(sites[0]);
+                    if (sites.length === 1) {
+                        // Single site
+                        await this.loadLibraries(sites[0]);
+                    } else {
+                        // Multiple sites (Προεπιλεγμένα)
+                        await this.loadLibrariesMultiSite(sites);
+                    }
                 }
             }
         });
+    }
+
+    /**
+     * Load document libraries από πολλαπλά sites (Προεπιλεγμένα)
+     */
+    async loadLibrariesMultiSite(siteUrls) {
+        showLoading(`Φόρτωση Document Libraries από ${siteUrls.length} sites...`);
+        
+        // Timeout protection
+        const timeoutId = setTimeout(() => {
+            hideLoading();
+            showNotification('Η φόρτωση πήρε πολύ ώρα', 'error');
+        }, 120000); // 2 minutes for multi-site
+
+        try {
+            console.log(`Loading document libraries from ${siteUrls.length} sites:`, siteUrls);
+            
+            this.libraries = [];
+            
+            // Load από όλα τα sites in parallel
+            const promises = siteUrls.map(async (siteUrl) => {
+                try {
+                    const siteLibs = await this._loadLibrariesForSite(siteUrl);
+                    return siteLibs;
+                } catch (error) {
+                    console.error(`Failed to load libraries from ${siteUrl}:`, error);
+                    return [];
+                }
+            });
+            
+            const results = await Promise.all(promises);
+            
+            // Flatten results
+            results.forEach(libs => {
+                this.libraries.push(...libs);
+            });
+            
+            clearTimeout(timeoutId);
+            hideLoading();
+            
+            this._renderLibraries();
+            showNotification(`Βρέθηκαν ${this.libraries.length} Document Libraries από ${siteUrls.length} sites`, 'success');
+            
+        } catch (error) {
+            clearTimeout(timeoutId);
+            hideLoading();
+            console.error('Failed to load document libraries:', error);
+            showNotification('Αποτυχία φόρτωσης Document Libraries', 'error');
+        }
     }
 
     /**
@@ -68,46 +124,7 @@ class DocumentLibrariesComponent {
         }, 60000);
 
         try {
-            console.log(`Loading document libraries for: ${siteUrl}`);
-            
-            // Παίρνουμε όλα τα lists
-            const allLists = await this.spAPI.getSiteLists(siteUrl);
-            
-            // Φιλτράρουμε μόνο Document Libraries (BaseType = 1)
-            const docLibs = allLists.filter(list => list.BaseType === 1);
-            
-            console.log(`Found ${docLibs.length} document libraries`);
-            
-            // Για κάθε library, παίρνουμε τα permissions
-            this.libraries = [];
-            for (const lib of docLibs) {
-                try {
-                    const permissions = await this.spAPI.getListPermissions(siteUrl, lib.Id);
-                    
-                    // Count folders
-                    let folderCount = 0;
-                    try {
-                        const folders = await this.spAPI.getFoldersRecursive(siteUrl, lib.RootFolder.ServerRelativeUrl);
-                        folderCount = folders.length;
-                    } catch (err) {
-                        console.warn(`Failed to count folders for ${lib.Title}:`, err.message);
-                    }
-                    
-                    this.libraries.push({
-                        siteUrl: siteUrl,
-                        id: lib.Id,
-                        title: lib.Title,
-                        description: lib.Description,
-                        itemCount: lib.ItemCount,
-                        folderCount: folderCount,
-                        serverRelativeUrl: lib.RootFolder.ServerRelativeUrl,
-                        permissions: permissions,
-                        hasUniquePermissions: lib.HasUniqueRoleAssignments
-                    });
-                } catch (error) {
-                    console.warn(`Failed to get permissions for ${lib.Title}:`, error.message);
-                }
-            }
+            this.libraries = await this._loadLibrariesForSite(siteUrl);
             
             clearTimeout(timeoutId);
             hideLoading();
@@ -131,6 +148,60 @@ class DocumentLibrariesComponent {
     }
 
     /**
+     * Helper: Load libraries για ένα site (reusable)
+     */
+    async _loadLibrariesForSite(siteUrl) {
+        console.log(`Loading document libraries for: ${siteUrl}`);
+        
+        // Παίρνουμε όλα τα lists
+        const allLists = await this.spAPI.getSiteLists(siteUrl);
+        
+        // Λίστες που θέλουμε να αγνοήσουμε
+        const excludedLists = ['Form Templates', 'Site Assets', 'Style Library', 'Site Pages'];
+        
+        // Φιλτράρουμε μόνο Document Libraries (BaseType = 1) και όχι excluded
+        const docLibs = allLists.filter(list => 
+            list.BaseType === 1 && 
+            !excludedLists.includes(list.Title)
+        );
+        
+        console.log(`Found ${docLibs.length} document libraries in ${siteUrl}`);
+        
+        // Για κάθε library, παίρνουμε τα permissions
+        const libraries = [];
+        for (const lib of docLibs) {
+            try {
+                const permissions = await this.spAPI.getListPermissions(siteUrl, lib.Id);
+                
+                // Count folders
+                let folderCount = 0;
+                try {
+                    const folders = await this.spAPI.getFoldersRecursive(siteUrl, lib.RootFolder.ServerRelativeUrl);
+                    folderCount = folders.length;
+                } catch (err) {
+                    console.warn(`Failed to count folders for ${lib.Title}:`, err.message);
+                }
+                
+                libraries.push({
+                    siteUrl: siteUrl,
+                    id: lib.Id,
+                    title: lib.Title,
+                    description: lib.Description,
+                    itemCount: lib.ItemCount,
+                    folderCount: folderCount,
+                    serverRelativeUrl: lib.RootFolder.ServerRelativeUrl,
+                    permissions: permissions,
+                    hasUniquePermissions: lib.HasUniqueRoleAssignments
+                });
+            } catch (error) {
+                console.warn(`Failed to get permissions for ${lib.Title}:`, error.message);
+            }
+        }
+        
+        return libraries;
+    }
+
+    /**
      * Render libraries table
      */
     _renderLibraries() {
@@ -146,11 +217,16 @@ class DocumentLibrariesComponent {
             return;
         }
 
+        // Check if multi-site mode (more than 1 unique site)
+        const uniqueSites = [...new Set(this.libraries.map(l => l.siteUrl))];
+        const isMultiSite = uniqueSites.length > 1;
+
         let html = `
             <div class="table-responsive">
                 <table class="table table-hover">
                     <thead>
                         <tr>
+                            ${isMultiSite ? '<th>Site</th>' : ''}
                             <th>Library</th>
                             <th>Items</th>
                             <th>Φάκελοι</th>
@@ -163,6 +239,7 @@ class DocumentLibrariesComponent {
         `;
 
         for (const lib of this.libraries) {
+            const siteName = this._extractSiteName(lib.siteUrl);
             const uniquePermsIcon = lib.hasUniquePermissions 
                 ? `<span class="badge bg-warning"><i class="bi bi-shield-lock"></i> Yes</span>`
                 : `<span class="badge bg-secondary">No</span>`;
@@ -177,6 +254,11 @@ class DocumentLibrariesComponent {
             
             html += `
                 <tr>
+                    ${isMultiSite ? `
+                        <td>
+                            <small class="text-muted">${escapeHtml(siteName)}</small>
+                        </td>
+                    ` : ''}
                     <td>
                         <strong><i class="bi ${ICONS.folder}"></i> ${escapeHtml(lib.title)}</strong>
                         ${lib.description ? `<br><small class="text-muted">${escapeHtml(lib.description)}</small>` : ''}
@@ -413,6 +495,25 @@ class DocumentLibrariesComponent {
         `;
 
         return html;
+    }
+
+    /**
+     * Helper: Extract site name από URL
+     */
+    _extractSiteName(siteUrl) {
+        if (!siteUrl) return 'N/A';
+        try {
+            const url = new URL(siteUrl);
+            const pathParts = url.pathname.split('/').filter(p => p);
+            // Αν είναι root site
+            if (pathParts.length === 0) {
+                return url.hostname.split('.')[0];
+            }
+            // Αν είναι subsite
+            return pathParts[pathParts.length - 1];
+        } catch {
+            return siteUrl;
+        }
     }
 }
 
