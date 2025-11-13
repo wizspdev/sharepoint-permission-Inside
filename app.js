@@ -12,6 +12,7 @@ class SharePointPermissionsApp {
         this.permissionAggregator = null;
         this.userSelector = null;
         this.permissionModal = null;
+        this.groupMembersModal = null;
         this.components = {};
     }
 
@@ -45,6 +46,7 @@ class SharePointPermissionsApp {
                 this.userSelector, 
                 CONFIG
             );
+            this.groupMembersModal = new GroupMembersModal(this.spAPI, this.graphAPI, CONFIG);
 
             // Show main app
             await this._showMainApp();
@@ -181,6 +183,14 @@ class SharePointPermissionsApp {
      */
     showUserSelector(options) {
         return this.userSelector.show(options);
+    }
+
+    /**
+     * Public method to show group members modal
+     * Called by components when clicking on a group
+     */
+    showGroupMembers(groupName, principalId, siteUrl) {
+        return this.groupMembersModal.show(groupName, principalId, siteUrl);
     }
 
     /**

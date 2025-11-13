@@ -359,11 +359,17 @@ class SitePermissionsComponent {
         `;
 
         for (const perm of paginated.data) {
+            const isGroup = perm.principalTypeValue === 8; // SharePoint Group
+            const groupClickable = isGroup ? 'cursor-pointer text-primary' : '';
+            const groupDataAttrs = isGroup ? `data-group-name="${escapeHtml(perm.principalName)}" data-principal-id="${perm.principalId}" data-site-url="${escapeHtml(perm.siteUrl || this.currentSite)}"` : '';
+            
             html += `
                 <tr>
                     <td>
                         <i class="bi ${perm.icon} me-2"></i>
+                        ${isGroup ? `<span class="group-name-link ${groupClickable}" ${groupDataAttrs} title="Κλικάρετε για να δείτε τα μέλη">` : ''}
                         ${escapeHtml(perm.principalName)}
+                        ${isGroup ? '</span>' : ''}
                     </td>
                     <td>
                         <span class="badge bg-secondary">${perm.principalType}</span>
@@ -437,6 +443,17 @@ class SitePermissionsComponent {
             });
         });
 
+        // Group name links - Show members on click
+        document.querySelectorAll('.group-name-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const groupName = e.currentTarget.dataset.groupName;
+                const principalId = e.currentTarget.dataset.principalId;
+                const siteUrl = e.currentTarget.dataset.siteUrl;
+                this._showGroupMembers(groupName, principalId, siteUrl);
+            });
+        });
+
         // Edit buttons
         document.querySelectorAll('.edit-perm-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -459,6 +476,14 @@ class SitePermissionsComponent {
         document.getElementById('addSitePermBtn')?.addEventListener('click', () => {
             this._addPermission();
         });
+    }
+
+    /**
+     * Show group members modal
+     */
+    _showGroupMembers(groupName, principalId, siteUrl) {
+        console.log(`Showing members for group: ${groupName}`);
+        window.app.showGroupMembers(groupName, principalId, siteUrl);
     }
 
     /**

@@ -50,6 +50,28 @@ body {
     border-bottom: 2px solid #dee2e6;
 }
 
+/* Clickable Group Names */
+.group-name-link {
+    cursor: pointer;
+    text-decoration: none;
+    border-bottom: 1px dotted #0078d4;
+    transition: all 0.2s;
+}
+
+.group-name-link:hover {
+    color: #0056b3 !important;
+    border-bottom-style: solid;
+    text-decoration: none;
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.text-primary {
+    color: #0078d4 !important;
+}
+
 .nav-tabs .nav-link {
     color: #6c757d;
     border: none;
