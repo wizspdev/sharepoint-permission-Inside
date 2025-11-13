@@ -308,8 +308,20 @@ function showLoading(message = 'Φόρτωση...') {
 function hideLoading() {
     const loadingOverlay = document.getElementById('loadingOverlay');
     if (loadingOverlay) {
-        loadingOverlay.style.display = 'none';
+        // Remove the element completely instead of just hiding it
+        loadingOverlay.remove();
     }
+    
+    // Also remove any stuck modal backdrops
+    document.querySelectorAll('.modal-backdrop.fade.show').forEach(el => {
+        if (!document.querySelector('.modal.show')) {
+            // Only remove backdrop if no modal is actually open
+            el.remove();
+        }
+    });
+    
+    // Ensure body scroll is restored
+    document.body.style.overflow = 'auto';
 }
 
 /**
