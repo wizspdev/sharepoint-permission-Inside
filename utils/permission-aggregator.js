@@ -49,16 +49,22 @@ class PermissionAggregator {
                     
                     if (sitePerms) {
                         sitePermissions.push(sitePerms);
+                        console.log(`✅ Found site permissions:`, sitePerms);
                         
                         // Collect SharePoint groups που ανήκει ο χρήστης
                         sitePerms.permissions.forEach(perm => {
+                            console.log(`  🔹 Permission:`, perm);
                             if (!perm.isDirect && perm.matchedThrough && perm.matchedThrough !== 'Direct') {
-                                allGroups.push({
+                                const groupInfo = {
                                     groupName: perm.matchedThrough,
                                     site: siteUrl,
                                     siteName: sitePerms.siteTitle,
                                     permissions: perm.roles
-                                });
+                                };
+                                console.log(`    ✅ Adding group:`, groupInfo);
+                                allGroups.push(groupInfo);
+                            } else {
+                                console.log(`    ⏭️ Skipping (isDirect=${perm.isDirect}, matchedThrough="${perm.matchedThrough}")`);
                             }
                         });
                     }

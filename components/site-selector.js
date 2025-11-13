@@ -464,14 +464,19 @@ class SiteSelectorComponent {
                     if (this.selectedSites.includes(siteUrl)) {
                         // Remove
                         this.selectedSites = this.selectedSites.filter(s => s !== siteUrl);
+                        console.log('🟢 [SiteSelector] Site removed:', siteUrl);
                     } else {
                         // Add
                         this.selectedSites.push(siteUrl);
+                        console.log('🟢 [SiteSelector] Site added:', siteUrl);
                     }
+                    
+                    console.log('🟢 [SiteSelector] Current selectedSites:', this.selectedSites);
                     
                     this._updateMultiSelectedDisplay();
                     
                     if (this.onSelectionChange) {
+                        console.log('🟢 [SiteSelector] Calling onSelectionChange with:', this.selectedSites);
                         await this.onSelectionChange(this.selectedSites, false);
                     }
                     

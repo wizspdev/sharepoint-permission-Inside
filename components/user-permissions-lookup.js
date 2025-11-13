@@ -130,13 +130,21 @@ class UserPermissionsLookupComponent {
             mode: 'multi',
             showDefaultOption: true,
             onSelectionChange: async (sites, isDefault) => {
+                console.log('🔵 [UserLookup] onSelectionChange called with:', { sites, isDefault });
                 this.selectedSites = sites;
+                console.log('🔵 [UserLookup] this.selectedSites updated to:', this.selectedSites);
+                
                 // Αν έχει ήδη γίνει αναζήτηση χρήστη, ξανακάνε την αναζήτηση με το νέο φίλτρο
                 if (this.currentUser) {
+                    console.log('🔵 [UserLookup] Re-running search for:', this.currentUser);
                     await this.loadUserPermissions(this.currentUser);
+                } else {
+                    console.log('🔵 [UserLookup] No current user, waiting for search');
                 }
             }
         });
+        
+        console.log('🔵 [UserLookup] Site selector rendered, initial selectedSites:', this.selectedSites);
 
         this._attachEventListeners();
     }
@@ -243,14 +251,22 @@ class UserPermissionsLookupComponent {
         }, 60000);
 
         try {
-            console.log(`Loading permissions for user: ${email}`);
-            console.log(`Selected sites for filtering:`, this.selectedSites);
+            console.log('🔍 [UserLookup] =====================================');
+            console.log('🔍 [UserLookup] Loading permissions for user:', email);
+            console.log('🔍 [UserLookup] this.selectedSites:', this.selectedSites);
+            console.log('🔍 [UserLookup] selectedSites type:', typeof this.selectedSites);
+            console.log('🔍 [UserLookup] selectedSites length:', this.selectedSites?.length);
+            console.log('🔍 [UserLookup] selectedSites is array?', Array.isArray(this.selectedSites));
             
             // Get user permissions using the permission aggregator
             // Pass selectedSites για filtering (αν υπάρχουν)
+            const sitesToPass = this.selectedSites && this.selectedSites.length > 0 ? this.selectedSites : null;
+            console.log('🔍 [UserLookup] Passing to aggregator:', sitesToPass);
+            console.log('🔍 [UserLookup] =====================================');
+            
             this.userPermissions = await this.permissionAggregator.getUserPermissions(
                 email,
-                this.selectedSites && this.selectedSites.length > 0 ? this.selectedSites : null
+                sitesToPass
             );
             
             console.log('User permissions loaded:', this.userPermissions);
