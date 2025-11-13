@@ -14,7 +14,7 @@ class PermissionAggregator {
      * Παίρνει όλα τα permissions για έναν συγκεκριμένο χρήστη
      * Επιστρέφει: { sites: [], folders: [], groups: [] }
      */
-    async getUserPermissions(userEmail) {
+    async getUserPermissions(userEmail, customSites = null) {
         showLoading('Αναζήτηση δικαιωμάτων χρήστη...');
         
         try {
@@ -25,12 +25,21 @@ class PermissionAggregator {
             const userGroups = await this.graphAPI.getUserGroups(user.id);
             const groupIds = userGroups.map(g => g.id);
             
-            // 3. Αναλύουμε τα monitored sites
+            // 3. Αναλύουμε τα sites (custom ή monitored)
+            const sitesToCheck = customSites && customSites.length > 0 
+                ? customSites 
+                : this.config.sharepoint.monitoredSites;
+            
+            console.log(`Checking ${sitesToCheck.length} sites for user ${userEmail}:`, sitesToCheck);
+            
             const sitePermissions = [];
             const folderPermissions = [];
+            const allGroups = [];
             
-            for (const siteUrl of this.config.sharepoint.monitoredSites) {
+            for (const siteUrl of sitesToCheck) {
                 try {
+                    console.log(`Analyzing site: ${siteUrl}`);
+                    
                     // Παίρνουμε site permissions
                     const sitePerms = await this._analyzeSitePermissions(
                         siteUrl, 
@@ -40,6 +49,18 @@ class PermissionAggregator {
                     
                     if (sitePerms) {
                         sitePermissions.push(sitePerms);
+                        
+                        // Collect SharePoint groups που ανήκει ο χρήστης
+                        sitePerms.permissions.forEach(perm => {
+                            if (!perm.isDirect && perm.matchedThrough && perm.matchedThrough !== 'Direct') {
+                                allGroups.push({
+                                    groupName: perm.matchedThrough,
+                                    site: siteUrl,
+                                    siteName: sitePerms.siteTitle,
+                                    permissions: perm.roles
+                                });
+                            }
+                        });
                     }
                     
                     // Παίρνουμε folder permissions
@@ -59,13 +80,19 @@ class PermissionAggregator {
             
             hideLoading();
             
+            console.log(`User permissions aggregation complete:`, {
+                sites: sitePermissions.length,
+                folders: folderPermissions.length,
+                groups: allGroups.length
+            });
+            
             return {
                 user: {
                     email: userEmail,
                     displayName: user.displayName,
                     id: user.id
                 },
-                groups: userGroups,
+                groups: allGroups, // SharePoint groups με permissions (όχι Azure AD groups)
                 sites: sitePermissions,
                 folders: folderPermissions,
                 summary: this._createSummary(sitePermissions, folderPermissions)
@@ -89,10 +116,11 @@ class PermissionAggregator {
             const roleAssignments = await this.spAPI.getSitePermissions(siteUrl);
             
             // Ελέγχουμε αν ο χρήστης ή τα groups του έχουν permissions
-            const userPermissions = this._findUserInPermissions(
+            const userPermissions = await this._findUserInPermissionsAsync(
                 roleAssignments,
                 user,
-                userGroups
+                userGroups,
+                siteUrl
             );
             
             if (userPermissions.length > 0) {
@@ -124,10 +152,11 @@ class PermissionAggregator {
             
             for (const folder of uniquePermFolders) {
                 // Ελέγχουμε αν ο χρήστης έχει permissions σε αυτόν τον folder
-                const userPermissions = this._findUserInPermissions(
+                const userPermissions = await this._findUserInPermissionsAsync(
                     folder.permissions,
                     user,
-                    userGroups
+                    userGroups,
+                    siteUrl
                 );
                 
                 if (userPermissions.length > 0) {
@@ -152,11 +181,12 @@ class PermissionAggregator {
 
     /**
      * Βρίσκει αν ένας χρήστης ή τα groups του έχουν permissions
+     * Αυτή είναι ASYNC τώρα γιατί ελέγχει group membership
      */
-    _findUserInPermissions(roleAssignments, user, userGroups) {
+    async _findUserInPermissionsAsync(roleAssignments, user, userGroups, siteUrl) {
         const foundPermissions = [];
-        const userLoginName = user.userPrincipalName.toLowerCase();
-        const groupIds = userGroups.map(g => g.id.toLowerCase());
+        const userLoginName = (user.userPrincipalName || user.mail || '').toLowerCase();
+        const userEmail = (user.mail || user.userPrincipalName || '').toLowerCase();
         
         for (const assignment of roleAssignments) {
             const member = assignment.Member;
@@ -166,20 +196,11 @@ class PermissionAggregator {
             let matchedThrough = null;
             
             // Έλεγχος αν είναι ο ίδιος ο χρήστης
-            if (member.LoginName && member.LoginName.toLowerCase().includes(userLoginName)) {
+            const memberLogin = (member.LoginName || '').toLowerCase();
+            if (memberLogin.includes(userLoginName) || memberLogin.includes(userEmail)) {
                 isDirect = true;
                 matchedThrough = 'Direct';
-            }
-            // Έλεγχος αν είναι μέσω group
-            else if (member.PrincipalType === PRINCIPAL_TYPES.SHAREPOINT_GROUP || 
-                     member.PrincipalType === PRINCIPAL_TYPES.SECURITY_GROUP) {
-                // Θα πρέπει να ελέγξουμε τα members του group
-                // Για απλότητα, υποθέτουμε ότι αν το group title περιέχει το email
-                isDirect = false;
-                matchedThrough = member.Title;
-            }
-            
-            if (isDirect || matchedThrough) {
+                
                 foundPermissions.push({
                     principalName: member.Title,
                     principalType: getPrincipalTypeName(member.PrincipalType),
@@ -188,9 +209,41 @@ class PermissionAggregator {
                     matchedThrough: matchedThrough
                 });
             }
+            // Έλεγχος αν είναι μέσω SharePoint group
+            else if (member.PrincipalType === PRINCIPAL_TYPES.SHAREPOINT_GROUP) {
+                try {
+                    // Ελέγχουμε τα members του group
+                    const groupMembers = await this.spAPI.getGroupMembers(siteUrl, member.Id);
+                    const isMember = groupMembers.some(m => {
+                        const mLogin = (m.LoginName || '').toLowerCase();
+                        const mEmail = (m.Email || '').toLowerCase();
+                        return mLogin.includes(userEmail) || mEmail === userEmail || mLogin.includes(userLoginName);
+                    });
+                    
+                    if (isMember) {
+                        foundPermissions.push({
+                            principalName: member.Title,
+                            principalType: getPrincipalTypeName(member.PrincipalType),
+                            roles: roles.map(r => r.Name),
+                            isDirect: false,
+                            matchedThrough: member.Title
+                        });
+                    }
+                } catch (err) {
+                    console.warn(`Failed to check group ${member.Title}:`, err.message);
+                }
+            }
         }
         
         return foundPermissions;
+    }
+    
+    /**
+     * OLD - Sync version (deprecated)
+     */
+    _findUserInPermissions(roleAssignments, user, userGroups) {
+        console.warn('Using deprecated sync _findUserInPermissions');
+        return [];
     }
 
     /**

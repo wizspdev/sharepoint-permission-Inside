@@ -234,10 +234,26 @@ class UserPermissionsLookupComponent {
         this.currentUser = email;
         
         showLoading('Αναζήτηση δικαιωμάτων χρήστη...');
+        
+        // Timeout protection
+        const timeoutId = setTimeout(() => {
+            console.error('User lookup timeout');
+            hideLoading();
+            showNotification('Η αναζήτηση πήρε πολύ ώρα', 'error');
+        }, 60000);
 
         try {
+            console.log(`Loading permissions for user: ${email}`);
+            console.log(`Selected sites for filtering:`, this.selectedSites);
+            
             // Get user permissions using the permission aggregator
-            this.userPermissions = await this.permissionAggregator.getUserPermissions(email);
+            // Pass selectedSites για filtering (αν υπάρχουν)
+            this.userPermissions = await this.permissionAggregator.getUserPermissions(
+                email,
+                this.selectedSites && this.selectedSites.length > 0 ? this.selectedSites : null
+            );
+            
+            console.log('User permissions loaded:', this.userPermissions);
             
             // Hide initial message, show results
             document.getElementById('initialMessage').style.display = 'none';
@@ -254,11 +270,15 @@ class UserPermissionsLookupComponent {
             this._renderFoldersTab();
             this._renderGroupsTab();
 
+            clearTimeout(timeoutId);
             hideLoading();
-            showNotification('Η αναζήτηση ολοκληρώθηκε', 'success');
+            showNotification(`Βρέθηκαν ${this.userPermissions.sites.length} sites, ${this.userPermissions.groups.length} ομάδες`, 'success');
+            
+            console.log('✅ User lookup completed successfully');
         } catch (error) {
+            clearTimeout(timeoutId);
             hideLoading();
-            console.error('Failed to load user permissions', error);
+            console.error('❌ Failed to load user permissions', error);
             showNotification('Αποτυχία αναζήτησης δικαιωμάτων χρήστη', 'error');
             
             document.getElementById('initialMessage').innerHTML = `
@@ -478,37 +498,89 @@ class UserPermissionsLookupComponent {
         const container = document.getElementById('groups-content');
         const groups = this.userPermissions.groups;
 
-        if (groups.length === 0) {
+        console.log('Rendering groups tab:', groups);
+
+        if (!groups || groups.length === 0) {
             container.innerHTML = `
                 <div class="text-center text-muted py-4">
-                    <i class="bi ${ICONS.info}"></i>
-                    <p>Ο χρήστης δεν ανήκει σε καμία ομάδα</p>
+                    <i class="bi ${ICONS.info} fs-1"></i>
+                    <p class="mt-2">Ο χρήστης δεν ανήκει σε καμία SharePoint ομάδα με δικαιώματα</p>
                 </div>
             `;
             return;
         }
 
         let html = `
-            <div class="list-group">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Ομάδα</th>
+                            <th>Site</th>
+                            <th>Δικαιώματα</th>
+                        </tr>
+                    </thead>
+                    <tbody>
         `;
 
         for (const group of groups) {
+            const groupName = group.groupName || group.displayName || 'Unknown';
+            const siteName = group.siteName || this._extractSiteName(group.site);
+            const permissions = Array.isArray(group.permissions) ? group.permissions.join(', ') : 'N/A';
+            
             html += `
-                <div class="list-group-item">
-                    <div class="d-flex w-100 justify-content-between">
-                        <h6 class="mb-1">
-                            <i class="bi ${ICONS.group} me-2"></i>
-                            ${escapeHtml(group.displayName)}
-                        </h6>
-                    </div>
-                    ${group.description ? `<p class="mb-1 text-muted small">${escapeHtml(group.description)}</p>` : ''}
-                </div>
+                <tr>
+                    <td>
+                        <i class="bi ${ICONS.group} me-2"></i>
+                        <strong>${escapeHtml(groupName)}</strong>
+                    </td>
+                    <td>
+                        <small class="text-muted">${escapeHtml(siteName)}</small>
+                    </td>
+                    <td>
+                        ${this._renderPermissionBadges(group.permissions)}
+                    </td>
+                </tr>
             `;
         }
 
-        html += '</div>';
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
 
         container.innerHTML = html;
+    }
+
+    /**
+     * Helper: Render permission badges
+     */
+    _renderPermissionBadges(permissions) {
+        if (!permissions || !Array.isArray(permissions) || permissions.length === 0) {
+            return '<span class="badge bg-secondary">N/A</span>';
+        }
+        
+        return permissions.map(perm => {
+            const permInfo = getPermissionLevelInfo(perm);
+            return `<span class="badge bg-${permInfo.color} me-1">
+                        <i class="bi ${permInfo.icon}"></i> ${perm}
+                    </span>`;
+        }).join('');
+    }
+
+    /**
+     * Helper: Extract site name from URL
+     */
+    _extractSiteName(siteUrl) {
+        if (!siteUrl) return 'N/A';
+        try {
+            const url = new URL(siteUrl);
+            const pathParts = url.pathname.split('/').filter(p => p);
+            return pathParts[pathParts.length - 1] || url.hostname;
+        } catch {
+            return siteUrl;
+        }
     }
 
     /**
