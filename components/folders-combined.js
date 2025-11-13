@@ -115,6 +115,10 @@ class FoldersCombinedComponent {
                         this.spAPI.getSharedFolders(siteUrl)
                     ]);
                     
+                    // Add siteUrl to each folder
+                    uniquePerms.forEach(folder => folder.siteUrl = siteUrl);
+                    shared.forEach(folder => folder.siteUrl = siteUrl);
+                    
                     // Filter excluded lists
                     const filteredUniquePerms = this._filterExcludedLists(uniquePerms);
                     
@@ -167,6 +171,10 @@ class FoldersCombinedComponent {
                 this.spAPI.getSharedFolders(siteUrl)
             ]);
             
+            // Add siteUrl to each folder
+            uniquePermFolders.forEach(folder => folder.siteUrl = siteUrl);
+            sharedFolders.forEach(folder => folder.siteUrl = siteUrl);
+            
             // Filter excluded lists
             this.uniquePermFolders = this._filterExcludedLists(uniquePermFolders);
             this.sharedFolders = sharedFolders;
@@ -210,14 +218,31 @@ class FoldersCombinedComponent {
 
         console.log(`Rendering ${this.uniquePermFolders.length} folders with unique permissions`);
 
+        // Check if multi-site mode
+        const uniqueSites = [...new Set(this.uniquePermFolders.map(f => f.siteUrl))];
+        const isMultiSite = uniqueSites.length > 1;
+
         let html = `
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover" id="uniqueFoldersTable">
                     <thead>
                         <tr>
                             <th>
                                 <input type="checkbox" id="selectAllFolders" class="form-check-input">
                             </th>
+                            ${isMultiSite ? `
+                                <th>
+                                    Site
+                                    <select id="folderSiteFilterDropdown" class="form-select form-select-sm mt-1">
+                                        <option value="">Όλα (${this.uniquePermFolders.length})</option>
+                                        ${uniqueSites.map(siteUrl => {
+                                            const siteName = this._extractSiteName(siteUrl);
+                                            const count = this.uniquePermFolders.filter(f => f.siteUrl === siteUrl).length;
+                                            return `<option value="${escapeHtml(siteUrl)}">${escapeHtml(siteName)} (${count})</option>`;
+                                        }).join('')}
+                                    </select>
+                                </th>
+                            ` : ''}
                             <th>Φάκελος</th>
                             <th>Library</th>
                             <th>Path</th>
@@ -226,7 +251,7 @@ class FoldersCombinedComponent {
                             <th>Ενέργειες</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="uniqueFoldersTableBody">
         `;
 
         for (const folder of this.uniquePermFolders) {
@@ -235,12 +260,18 @@ class FoldersCombinedComponent {
             const uniqueBadge = hasUnique 
                 ? '<span class="badge bg-warning"><i class="bi bi-shield-lock"></i> Yes</span>'
                 : '<span class="badge bg-secondary">No</span>';
+            const siteName = this._extractSiteName(folder.siteUrl);
             
             html += `
-                <tr>
+                <tr data-site-url="${escapeHtml(folder.siteUrl || '')}">
                     <td>
                         <input type="checkbox" class="form-check-input folder-checkbox" data-folder-path="${escapeHtml(folder.ServerRelativeUrl)}">
                     </td>
+                    ${isMultiSite ? `
+                        <td>
+                            <small class="text-muted">${escapeHtml(siteName)}</small>
+                        </td>
+                    ` : ''}
                     <td>
                         <i class="bi ${ICONS.folder}"></i> <strong>${escapeHtml(folder.Name)}</strong>
                     </td>
@@ -271,7 +302,7 @@ class FoldersCombinedComponent {
 
         container.innerHTML = html;
 
-        // Attach event listeners
+        // Attach event listeners για view permissions buttons
         document.querySelectorAll('.view-folder-perms').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const folderPath = e.currentTarget.dataset.folderPath;
@@ -281,6 +312,69 @@ class FoldersCombinedComponent {
                 }
             });
         });
+
+        // Attach event listener για site filter dropdown (multi-site mode)
+        if (isMultiSite) {
+            const filterDropdown = document.getElementById('folderSiteFilterDropdown');
+            filterDropdown?.addEventListener('change', (e) => {
+                this._filterFolderTableBySite(e.target.value);
+            });
+        }
+
+        // Attach event listener για select all checkbox
+        const selectAllCheckbox = document.getElementById('selectAllFolders');
+        selectAllCheckbox?.addEventListener('change', (e) => {
+            const checkboxes = document.querySelectorAll('.folder-checkbox');
+            checkboxes.forEach(cb => cb.checked = e.target.checked);
+        });
+    }
+
+    /**
+     * Filter folder table by site
+     */
+    _filterFolderTableBySite(siteUrl) {
+        const tableBody = document.getElementById('uniqueFoldersTableBody');
+        if (!tableBody) return;
+
+        const rows = tableBody.querySelectorAll('tr');
+        
+        if (!siteUrl) {
+            // Show all
+            rows.forEach(row => row.style.display = '');
+            console.log('Showing all folders');
+            return;
+        }
+
+        // Filter by site
+        let visibleCount = 0;
+        rows.forEach(row => {
+            const rowSiteUrl = row.dataset.siteUrl;
+            if (rowSiteUrl === siteUrl) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        console.log(`Filtered to ${visibleCount} folders from ${this._extractSiteName(siteUrl)}`);
+    }
+
+    /**
+     * Helper: Extract site name από URL
+     */
+    _extractSiteName(siteUrl) {
+        if (!siteUrl) return 'N/A';
+        try {
+            const url = new URL(siteUrl);
+            const pathParts = url.pathname.split('/').filter(p => p);
+            if (pathParts.length === 0) {
+                return url.hostname.split('.')[0];
+            }
+            return pathParts[pathParts.length - 1];
+        } catch {
+            return siteUrl;
+        }
     }
 
     /**

@@ -234,10 +234,22 @@ class DocumentLibrariesComponent {
 
         let html = `
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover" id="docLibrariesTable">
                     <thead>
                         <tr>
-                            ${isMultiSite ? '<th>Site</th>' : ''}
+                            ${isMultiSite ? `
+                                <th>
+                                    Site
+                                    <select id="siteFilterDropdown" class="form-select form-select-sm mt-1">
+                                        <option value="">Όλα (${this.libraries.length})</option>
+                                        ${uniqueSites.map(siteUrl => {
+                                            const siteName = this._extractSiteName(siteUrl);
+                                            const count = this.libraries.filter(l => l.siteUrl === siteUrl).length;
+                                            return `<option value="${escapeHtml(siteUrl)}">${escapeHtml(siteName)} (${count})</option>`;
+                                        }).join('')}
+                                    </select>
+                                </th>
+                            ` : ''}
                             <th>Library</th>
                             <th>Items</th>
                             <th>Φάκελοι</th>
@@ -246,7 +258,7 @@ class DocumentLibrariesComponent {
                             <th>Ενέργειες</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="docLibrariesTableBody">
         `;
 
         for (const lib of this.libraries) {
@@ -303,7 +315,7 @@ class DocumentLibrariesComponent {
 
         container.innerHTML = html;
 
-        // Attach event listeners
+        // Attach event listeners για view details buttons
         document.querySelectorAll('.view-lib-details').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const libId = e.currentTarget.dataset.libId;
@@ -313,6 +325,48 @@ class DocumentLibrariesComponent {
                 }
             });
         });
+
+        // Attach event listener για site filter dropdown (multi-site mode)
+        if (isMultiSite) {
+            const filterDropdown = document.getElementById('siteFilterDropdown');
+            filterDropdown?.addEventListener('change', (e) => {
+                this._filterTableBySite(e.target.value);
+            });
+        }
+    }
+
+    /**
+     * Filter table rows by selected site
+     */
+    _filterTableBySite(siteUrl) {
+        const tableBody = document.getElementById('docLibrariesTableBody');
+        if (!tableBody) return;
+
+        // Get all rows
+        const rows = tableBody.querySelectorAll('tr');
+        
+        if (!siteUrl) {
+            // Show all
+            rows.forEach(row => row.style.display = '');
+            console.log('Showing all libraries');
+            return;
+        }
+
+        // Filter by site
+        let visibleCount = 0;
+        this.libraries.forEach((lib, index) => {
+            const row = rows[index];
+            if (row) {
+                if (lib.siteUrl === siteUrl) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            }
+        });
+
+        console.log(`Filtered to ${visibleCount} libraries from ${this._extractSiteName(siteUrl)}`);
     }
 
     /**
