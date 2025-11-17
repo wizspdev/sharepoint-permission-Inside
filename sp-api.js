@@ -418,9 +418,27 @@ class SharePointAPI {
         try {
             const lists = await this.getSiteLists(siteUrl);
             const groupedFolders = [];
+            const excludedLibraries = new Set([
+                'form templates',
+                'site assets',
+                'style library',
+                'site pages',
+                'site collection documents',
+                'site collection images',
+                'pages',
+                'wizsp',
+                'shared documents',
+            ]);
+            const disallowedFromConfig = this.config?.sharepoint?.disallowedDocumentLibraries || [];
+            disallowedFromConfig.forEach(name => {
+                if (name) {
+                    excludedLibraries.add(name.toLowerCase());
+                }
+            });
 
             for (const list of lists) {
                 if (list.BaseType !== 1) continue; // Μόνο document libraries
+                if (excludedLibraries.has((list.Title || '').toLowerCase())) continue;
 
                 try {
                     const folders = await this.getFoldersRecursive(siteUrl, list.RootFolder.ServerRelativeUrl);
