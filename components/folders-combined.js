@@ -542,19 +542,29 @@ class FoldersCombinedComponent {
             'wizsp',
             'WIZSP'
         ];
+        const excludedLower = new Set(excludedLists.map(name => name.toLowerCase()));
+        const disallowedConfig = this.config?.sharepoint?.disallowedDocumentLibraries || [];
+        disallowedConfig.forEach(name => {
+            if (name) {
+                excludedLower.add(name.toLowerCase());
+            }
+        });
         const customOnlyPattern = this.config?.sharepoint?.customLibrariesOnlyPattern 
             ? new RegExp(this.config.sharepoint.customLibrariesOnlyPattern, 'i')
             : null;
+
         return folders.filter(folder => {
-            const libraryName = folder.library || '';
-            if (excludedLists.includes(libraryName)) {
+            const libraryName = (folder.library || '').trim();
+            const lowerName = libraryName.toLowerCase();
+
+            if (!libraryName) return false;
+            if (excludedLower.has(lowerName)) {
                 return false;
             }
             if (customOnlyPattern) {
                 return customOnlyPattern.test(libraryName);
             }
-            return libraryName.toLowerCase() !== 'documents' &&
-                   !libraryName.toLowerCase().startsWith('document');
+            return true;
         });
     }
 }
