@@ -12,7 +12,7 @@ class FoldersCombinedComponent {
         this.azureStorage = azureStorage;
         
         this.selectedSites = [];
-        this.uniquePermFolders = [];
+        this.allFolders = [];
         this.sharedFolders = [];
         this.siteSelector = null;
     }
@@ -35,8 +35,8 @@ class FoldersCombinedComponent {
                     <!-- Tabs -->
                     <ul class="nav nav-tabs mt-3" role="tablist">
                         <li class="nav-item">
-                            <button class="nav-link active" id="uniquePerms-tab" data-bs-toggle="tab" data-bs-target="#uniquePermsTab">
-                                <i class="bi ${ICONS.folder}"></i> Unique Permissions (<span id="uniquePermsCount">0</span>)
+                            <button class="nav-link active" id="allFolders-tab" data-bs-toggle="tab" data-bs-target="#allFoldersTab">
+                                <i class="bi ${ICONS.folder}"></i> Φάκελοι (<span id="allFoldersCount">0</span>)
                             </button>
                         </li>
                         <li class="nav-item">
@@ -48,11 +48,11 @@ class FoldersCombinedComponent {
                     
                     <!-- Tab Content -->
                     <div class="tab-content mt-3">
-                        <div class="tab-pane fade show active" id="uniquePermsTab">
-                            <div id="uniquePermsContent">
+                        <div class="tab-pane fade show active" id="allFoldersTab">
+                            <div id="allFoldersContent">
                                 <div class="text-center text-muted py-5">
                                     <i class="bi ${ICONS.info} fs-1"></i>
-                                    <p class="mt-2">Επιλέξτε site για να δείτε φακέλους με unique permissions</p>
+                                    <p class="mt-2">Επιλέξτε site για να δείτε όλους τους φακέλους</p>
                                 </div>
                             </div>
                         </div>
@@ -95,52 +95,45 @@ class FoldersCombinedComponent {
     async loadAllFoldersMultiSite(siteUrls) {
         showLoading(`Φόρτωση φακέλων από ${siteUrls.length} sites...`);
         
-        // Timeout protection
         const timeoutId = setTimeout(() => {
             hideLoading();
             showNotification('Η φόρτωση πήρε πολύ ώρα', 'error');
-        }, 120000); // 2 minutes for multi-site
+        }, 120000);
 
         try {
             console.log(`Loading folders from ${siteUrls.length} sites:`, siteUrls);
             
-            this.uniquePermFolders = [];
+            this.allFolders = [];
             this.sharedFolders = [];
             
-            // Load από όλα τα sites
             for (const siteUrl of siteUrls) {
                 try {
-                    const [uniquePerms, shared] = await Promise.all([
-                        this.spAPI.getAllFoldersWithUniquePermissions(siteUrl),
-                        this.spAPI.getSharedFolders(siteUrl)
-                    ]);
+                    const folders = await this.spAPI.getAllFoldersDetailed(siteUrl);
+                    const filtered = this._filterExcludedLists(folders);
                     
-                    // Add siteUrl to each folder
-                    uniquePerms.forEach(folder => folder.siteUrl = siteUrl);
-                    shared.forEach(folder => folder.siteUrl = siteUrl);
+                    filtered.forEach(folder => {
+                        folder.siteUrl = siteUrl;
+                        folder.siteName = this._extractSiteName(siteUrl);
+                    });
                     
-                    // Filter excluded lists
-                    const filteredUniquePerms = this._filterExcludedLists(uniquePerms);
-                    
-                    this.uniquePermFolders.push(...filteredUniquePerms);
-                    this.sharedFolders.push(...shared);
+                    this.allFolders.push(...filtered);
                 } catch (error) {
                     console.error(`Failed to load folders from ${siteUrl}:`, error);
                 }
             }
+
+            await this._identifySharedFolders();
             
             clearTimeout(timeoutId);
             hideLoading();
             
-            // Update counts
-            document.getElementById('uniquePermsCount').textContent = this.uniquePermFolders.length;
+            document.getElementById('allFoldersCount').textContent = this.allFolders.length;
             document.getElementById('sharedFoldersCount').textContent = this.sharedFolders.length;
             
-            // Render both tabs
-            this._renderUniquePermFolders();
+            this._renderAllFolders();
             this._renderSharedFolders();
             
-            showNotification(`Φόρτωση ολοκληρώθηκε: ${this.uniquePermFolders.length} unique, ${this.sharedFolders.length} shared από ${siteUrls.length} sites`, 'success');
+            showNotification(`Φόρτωση ολοκληρώθηκε: ${this.allFolders.length} φάκελοι, ${this.sharedFolders.length} κοινόχρηστοι από ${siteUrls.length} sites`, 'success');
             
         } catch (error) {
             clearTimeout(timeoutId);
@@ -151,7 +144,7 @@ class FoldersCombinedComponent {
     }
 
     /**
-     * Load both unique perm folders and shared folders
+     * Load folders για ένα site
      */
     async loadAllFolders(siteUrl) {
         showLoading('Φόρτωση φακέλων...');
@@ -165,32 +158,29 @@ class FoldersCombinedComponent {
         try {
             console.log(`Loading folders for: ${siteUrl}`);
             
-            // Load both in parallel
-            const [uniquePermFolders, sharedFolders] = await Promise.all([
-                this.spAPI.getAllFoldersWithUniquePermissions(siteUrl),
-                this.spAPI.getSharedFolders(siteUrl)
-            ]);
+            const folders = await this.spAPI.getAllFoldersDetailed(siteUrl);
             
-            // Add siteUrl to each folder
-            uniquePermFolders.forEach(folder => folder.siteUrl = siteUrl);
-            sharedFolders.forEach(folder => folder.siteUrl = siteUrl);
+            this.allFolders = this._filterExcludedLists(folders).map(folder => ({
+                ...folder,
+                siteUrl,
+                siteName: this._extractSiteName(siteUrl)
+            }));
             
-            // Filter excluded lists
-            this.uniquePermFolders = this._filterExcludedLists(uniquePermFolders);
-            this.sharedFolders = sharedFolders;
+            this.sharedFolders = [];
+            await this._identifySharedFolders();
             
             clearTimeout(timeoutId);
             hideLoading();
             
             // Update counts
-            document.getElementById('uniquePermsCount').textContent = this.uniquePermFolders.length;
+            document.getElementById('allFoldersCount').textContent = this.allFolders.length;
             document.getElementById('sharedFoldersCount').textContent = this.sharedFolders.length;
             
             // Render both tabs
-            this._renderUniquePermFolders();
+            this._renderAllFolders();
             this._renderSharedFolders();
             
-            showNotification(`Φόρτωση ολοκληρώθηκε: ${this.uniquePermFolders.length} unique, ${this.sharedFolders.length} shared`, 'success');
+            showNotification(`Φόρτωση ολοκληρώθηκε: ${this.allFolders.length} φάκελοι, ${this.sharedFolders.length} κοινόχρηστοι`, 'success');
             
         } catch (error) {
             clearTimeout(timeoutId);
@@ -201,163 +191,257 @@ class FoldersCombinedComponent {
     }
 
     /**
-     * Render unique permission folders tab
+     * Εντοπίζει τους κοινόχρηστους φακέλους
      */
-    _renderUniquePermFolders() {
-        const container = document.getElementById('uniquePermsContent');
-        
-        if (this.uniquePermFolders.length === 0) {
+    async _identifySharedFolders() {
+        this.sharedFolders = [];
+
+        for (const folder of this.allFolders) {
+            try {
+                const sharingInfo = await this.spAPI.getFolderSharingLinks(folder.siteUrl, folder.ServerRelativeUrl);
+                if (this._hasSharingLinks(sharingInfo)) {
+                    folder.isShared = true;
+                    folder.sharingInfo = sharingInfo;
+                    this.sharedFolders.push(folder);
+                } else {
+                    folder.isShared = false;
+                    folder.sharingInfo = null;
+                }
+            } catch (error) {
+                console.warn(`Failed to detect sharing info for ${folder.Name}`, error);
+                folder.isShared = false;
+                folder.sharingInfo = null;
+            }
+        }
+    }
+
+    /**
+     * Helper: Έχει sharing links;
+     */
+    _hasSharingLinks(sharingInfo) {
+        if (!sharingInfo || !sharingInfo.permissionsInformation) {
+            return false;
+        }
+
+        const permissions = sharingInfo.permissionsInformation;
+        const links = permissions.links;
+
+        if (!links) return false;
+        if (Array.isArray(links)) {
+            return links.length > 0;
+        }
+
+        if (links.results && Array.isArray(links.results)) {
+            return links.results.length > 0;
+        }
+
+        if (typeof links.length === 'number') {
+            return links.length > 0;
+        }
+
+        return false;
+    }
+
+    /**
+     * Render all folders tab
+     */
+    _renderAllFolders() {
+        this._renderFolderList(this.allFolders, 'allFoldersContent', 'all');
+    }
+
+    /**
+     * Generic folder list renderer (accordion)
+     */
+    _renderFolderList(folders, containerId, type) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        if (!folders || folders.length === 0) {
             container.innerHTML = `
                 <div class="text-center text-muted py-4">
-                    <i class="bi ${ICONS.info}"></i>
-                    <p>Δεν βρέθηκαν φάκελοι με unique permissions</p>
+                    <i class="bi ${ICONS.info} fs-1"></i>
+                    <p class="mt-2">${type === 'shared' ? 'Δεν βρέθηκαν κοινόχρηστοι φάκελοι' : 'Δεν βρέθηκαν φάκελοι'}</p>
                 </div>
             `;
             return;
         }
 
-        console.log(`Rendering ${this.uniquePermFolders.length} folders with unique permissions`);
+        const accordionId = `${containerId}Accordion`;
 
-        // Check if multi-site mode
-        const uniqueSites = [...new Set(this.uniquePermFolders.map(f => f.siteUrl))];
-        const isMultiSite = uniqueSites.length > 1;
+        let html = `<div class="accordion" id="${accordionId}">`;
 
-        let html = `
-            <div class="table-responsive">
-                <table class="table table-hover" id="uniqueFoldersTable">
-                    <thead>
-                        <tr>
-                            <th>
-                                <input type="checkbox" id="selectAllFolders" class="form-check-input">
-                            </th>
-                            ${isMultiSite ? `
-                                <th>
-                                    Site
-                                    <select id="folderSiteFilterDropdown" class="form-select form-select-sm mt-1">
-                                        <option value="">Όλα (${this.uniquePermFolders.length})</option>
-                                        ${uniqueSites.map(siteUrl => {
-                                            const siteName = this._extractSiteName(siteUrl);
-                                            const count = this.uniquePermFolders.filter(f => f.siteUrl === siteUrl).length;
-                                            return `<option value="${escapeHtml(siteUrl)}">${escapeHtml(siteName)} (${count})</option>`;
-                                        }).join('')}
-                                    </select>
-                                </th>
-                            ` : ''}
-                            <th>Φάκελος</th>
-                            <th>Library</th>
-                            <th>Path</th>
-                            <th>Permissions</th>
-                            <th>Unique Perms</th>
-                            <th>Ενέργειες</th>
-                        </tr>
-                    </thead>
-                    <tbody id="uniqueFoldersTableBody">
-        `;
+        folders.forEach((folder, index) => {
+            const collapseId = `${accordionId}-collapse-${index}`;
+            const headerId = `${accordionId}-header-${index}`;
+            const permsContainerId = `${collapseId}-perms`;
+            const creatorName = folder.createdBy?.name || 'Άγνωστος';
+            const creatorEmail = folder.createdBy?.email || '';
+            const badges = [];
 
-        for (const folder of this.uniquePermFolders) {
-            const permCount = folder.permissions ? folder.permissions.length : 0;
-            const hasUnique = folder.hasUniquePermissions || (permCount > 0);
-            const uniqueBadge = hasUnique 
-                ? '<span class="badge bg-warning"><i class="bi bi-shield-lock"></i> Yes</span>'
-                : '<span class="badge bg-secondary">No</span>';
-            const siteName = this._extractSiteName(folder.siteUrl);
-            
+            if (folder.hasUniquePermissions) {
+                badges.push(`<span class="badge bg-warning text-dark me-1"><i class="bi bi-shield-lock"></i> Unique</span>`);
+            } else {
+                badges.push(`<span class="badge bg-secondary me-1">Inherited</span>`);
+            }
+
+            if (folder.isShared) {
+                badges.push(`<span class="badge bg-success me-1"><i class="bi ${ICONS.share}"></i> Shared</span>`);
+            }
+
+            if (folder.siteName) {
+                badges.push(`<span class="badge bg-dark me-1">${escapeHtml(folder.siteName)}</span>`);
+            }
+
             html += `
-                <tr data-site-url="${escapeHtml(folder.siteUrl || '')}">
-                    <td>
-                        <input type="checkbox" class="form-check-input folder-checkbox" data-folder-path="${escapeHtml(folder.ServerRelativeUrl)}">
-                    </td>
-                    ${isMultiSite ? `
-                        <td>
-                            <small class="text-muted">${escapeHtml(siteName)}</small>
-                        </td>
-                    ` : ''}
-                    <td>
-                        <i class="bi ${ICONS.folder}"></i> <strong>${escapeHtml(folder.Name)}</strong>
-                    </td>
-                    <td>
-                        <span class="badge bg-info">${escapeHtml(folder.library || 'N/A')}</span>
-                    </td>
-                    <td>
-                        <small class="text-muted font-monospace">${escapeHtml(folder.ServerRelativeUrl)}</small>
-                    </td>
-                    <td>
-                        <span class="badge bg-secondary">${permCount} assignments</span>
-                    </td>
-                    <td>${uniqueBadge}</td>
-                    <td>
-                        <button class="btn btn-sm btn-primary view-folder-perms" data-folder-path="${escapeHtml(folder.ServerRelativeUrl)}">
-                            <i class="bi ${ICONS.info}"></i> Δικαιώματα
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="${headerId}">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}">
+                            <div class="w-100">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>${escapeHtml(folder.Name)}</strong>
+                                        <small class="text-muted d-block">${escapeHtml(folder.library || 'N/A')}</small>
+                                    </div>
+                                    <div>${badges.join('')}</div>
+                                </div>
+                                <div class="mt-1 small text-muted">
+                                    Δημιουργός: ${escapeHtml(creatorName)}${creatorEmail ? ` • ${escapeHtml(creatorEmail)}` : ''}
+                                </div>
+                            </div>
                         </button>
-                    </td>
-                </tr>
+                    </h2>
+                    <div id="${collapseId}" class="accordion-collapse collapse"
+                         data-bs-parent="#${accordionId}"
+                         data-folder-type="${type}"
+                         data-folder-index="${index}"
+                         data-perms-container-id="${permsContainerId}">
+                        <div class="accordion-body">
+                            ${this._renderFolderInfoBlock(folder)}
+                            ${type === 'shared' && folder.sharingInfo ? this._renderSharingSummary(folder.sharingInfo) : ''}
+                            <div class="mt-3">
+                                <h6>Δικαιώματα</h6>
+                                <div class="folder-permissions-container" id="${permsContainerId}">
+                                    <div class="text-muted small">Πατήστε για να δείτε ποιοι χρήστες έχουν πρόσβαση.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             `;
-        }
-
-        html += `
-                    </tbody>
-                </table>
-            </div>
-        `;
-
-        container.innerHTML = html;
-
-        // Attach event listeners για view permissions buttons
-        document.querySelectorAll('.view-folder-perms').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const folderPath = e.currentTarget.dataset.folderPath;
-                const folder = this.uniquePermFolders.find(f => f.ServerRelativeUrl === folderPath);
-                if (folder) {
-                    this._showFolderPermissionsModal(folder);
-                }
-            });
         });
 
-        // Attach event listener για site filter dropdown (multi-site mode)
-        if (isMultiSite) {
-            const filterDropdown = document.getElementById('folderSiteFilterDropdown');
-            filterDropdown?.addEventListener('change', (e) => {
-                this._filterFolderTableBySite(e.target.value);
-            });
-        }
+        html += '</div>';
+        container.innerHTML = html;
 
-        // Attach event listener για select all checkbox
-        const selectAllCheckbox = document.getElementById('selectAllFolders');
-        selectAllCheckbox?.addEventListener('change', (e) => {
-            const checkboxes = document.querySelectorAll('.folder-checkbox');
-            checkboxes.forEach(cb => cb.checked = e.target.checked);
+        this._attachAccordionEvents(accordionId, type);
+    }
+
+    /**
+     * Attach accordion events για φόρτωση δικαιωμάτων
+     */
+    _attachAccordionEvents(accordionId, type) {
+        const accordion = document.getElementById(accordionId);
+        if (!accordion) return;
+
+        accordion.querySelectorAll('.accordion-collapse').forEach(collapse => {
+            collapse.addEventListener('show.bs.collapse', async (event) => {
+                const target = event.currentTarget;
+                const index = parseInt(target.dataset.folderIndex, 10);
+                const permsContainerId = target.dataset.permsContainerId;
+                const permsContainer = document.getElementById(permsContainerId);
+                await this._ensureFolderPermissions(type, index, permsContainer);
+            });
         });
     }
 
     /**
-     * Filter folder table by site
+     * Φόρτωση δικαιωμάτων μόλις ανοιχτεί το accordion
      */
-    _filterFolderTableBySite(siteUrl) {
-        const tableBody = document.getElementById('uniqueFoldersTableBody');
-        if (!tableBody) return;
+    async _ensureFolderPermissions(type, index, container) {
+        if (!container) return;
+        const collection = type === 'shared' ? this.sharedFolders : this.allFolders;
+        const folder = collection[index];
+        if (!folder) return;
 
-        const rows = tableBody.querySelectorAll('tr');
-        
-        if (!siteUrl) {
-            // Show all
-            rows.forEach(row => row.style.display = '');
-            console.log('Showing all folders');
+        if (folder.permissionsLoaded) {
+            container.innerHTML = folder.permissionsHtml;
             return;
         }
 
-        // Filter by site
-        let visibleCount = 0;
-        rows.forEach(row => {
-            const rowSiteUrl = row.dataset.siteUrl;
-            if (rowSiteUrl === siteUrl) {
-                row.style.display = '';
-                visibleCount++;
-            } else {
-                row.style.display = 'none';
-            }
-        });
+        container.innerHTML = `
+            <div class="text-muted small">
+                <span class="spinner-border spinner-border-sm me-2"></span> Φόρτωση δικαιωμάτων...
+            </div>
+        `;
 
-        console.log(`Filtered to ${visibleCount} folders from ${this._extractSiteName(siteUrl)}`);
+        try {
+            const permissions = await this.spAPI.getFolderPermissions(folder.siteUrl, folder.ServerRelativeUrl);
+            folder.permissions = permissions;
+            folder.permissionsLoaded = true;
+            folder.permissionsHtml = permissions
+                ? this._renderFolderPermissionsTable(permissions)
+                : `<div class="alert alert-info"><i class="bi ${ICONS.info}"></i> Ο φάκελος κληρονομεί δικαιώματα από το parent.</div>`;
+
+            container.innerHTML = folder.permissionsHtml;
+        } catch (error) {
+            console.error('Failed to load folder permissions', error);
+            container.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi ${ICONS.error}"></i>
+                    Αποτυχία φόρτωσης δικαιωμάτων: ${escapeHtml(error.message)}
+                </div>
+            `;
+        }
+    }
+
+    /**
+     * Render folder info block
+     */
+    _renderFolderInfoBlock(folder) {
+        return `
+            <div class="row">
+                <div class="col-md-6">
+                    <ul class="list-unstyled small mb-3">
+                        <li><strong>Document Library:</strong> ${escapeHtml(folder.library || 'N/A')}</li>
+                        <li><strong>Document List:</strong> ${escapeHtml(folder.library || 'N/A')}</li>
+                        <li><strong>Site:</strong> ${escapeHtml(folder.siteName || '')}</li>
+                        <li><strong>Διαδρομή:</strong> <span class="font-monospace">${escapeHtml(folder.ServerRelativeUrl)}</span></li>
+                        <li><strong>Items:</strong> ${folder.ItemCount || 0}</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <ul class="list-unstyled small mb-0">
+                        <li><strong>Δημιουργός:</strong> ${escapeHtml(folder.createdBy?.name || 'Άγνωστος')}</li>
+                        ${folder.createdBy?.email ? `<li><strong>Email:</strong> ${escapeHtml(folder.createdBy.email)}</li>` : ''}
+                        <li><strong>Δημιουργήθηκε:</strong> ${formatDate(folder.TimeCreated)}</li>
+                        <li><strong>Τροποποιήθηκε:</strong> ${formatDate(folder.TimeLastModified)}</li>
+                        <li><strong>Unique Permissions:</strong> ${folder.hasUniquePermissions ? 'Ναι' : 'Όχι'}</li>
+                    </ul>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * Render sharing info summary
+     */
+    _renderSharingSummary(sharingInfo) {
+        if (!sharingInfo || !sharingInfo.permissionsInformation) {
+            return '';
+        }
+
+        const permissions = sharingInfo.permissionsInformation;
+        const linksCount = permissions.links ? permissions.links.length : 0;
+
+        return `
+            <div class="alert alert-info small">
+                <strong><i class="bi ${ICONS.share}"></i> Sharing Links</strong>
+                <div class="mt-2">
+                    <span class="badge bg-primary me-2">${linksCount} links</span>
+                    ${permissions.hasInheritedLinks ? '<span class="badge bg-secondary">Κληρονομικά links</span>' : ''}
+                </div>
+            </div>
+        `;
     }
 
     /**
@@ -381,114 +465,7 @@ class FoldersCombinedComponent {
      * Render shared folders tab
      */
     _renderSharedFolders() {
-        const container = document.getElementById('sharedFoldersContent');
-        
-        if (this.sharedFolders.length === 0) {
-            container.innerHTML = `
-                <div class="text-center text-muted py-4">
-                    <i class="bi ${ICONS.info}"></i>
-                    <p>Δεν βρέθηκαν κοινόχρηστοι φάκελοι</p>
-                </div>
-            `;
-            return;
-        }
-
-        let html = `
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Φάκελος/Αρχείο</th>
-                            <th>Shared With</th>
-                            <th>Link Type</th>
-                            <th>Expires</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
-
-        for (const item of this.sharedFolders) {
-            const sharedWith = item.sharedWith || [];
-            const linkType = item.linkDetails?.type || 'N/A';
-            const expires = item.linkDetails?.expirationDateTime 
-                ? formatDate(new Date(item.linkDetails.expirationDateTime))
-                : 'Never';
-            
-            html += `
-                <tr>
-                    <td>
-                        <i class="bi ${item.fileExtension ? ICONS.file : ICONS.folder}"></i> 
-                        <strong>${escapeHtml(item.name)}</strong>
-                    </td>
-                    <td>
-                        ${sharedWith.length > 0 
-                            ? `<span class="badge bg-primary">${sharedWith.length} users</span>`
-                            : `<span class="badge bg-secondary">Anyone with link</span>`
-                        }
-                    </td>
-                    <td>
-                        <span class="badge bg-info">${linkType}</span>
-                    </td>
-                    <td>
-                        <small class="text-muted">${expires}</small>
-                    </td>
-                </tr>
-            `;
-        }
-
-        html += `
-                    </tbody>
-                </table>
-            </div>
-        `;
-
-        container.innerHTML = html;
-    }
-
-    /**
-     * Show folder permissions modal
-     */
-    _showFolderPermissionsModal(folder) {
-        const modalHtml = `
-            <div class="modal fade" id="folderPermsModal" tabindex="-1">
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">
-                                <i class="bi ${ICONS.folder}"></i> ${escapeHtml(folder.Name)}
-                            </h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <p class="text-muted mb-3">
-                                <small>${escapeHtml(folder.ServerRelativeUrl)}</small>
-                            </p>
-                            
-                            ${this._renderFolderPermissionsTable(folder.permissions)}
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Κλείσιμο</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        // Remove existing modal
-        const existing = document.getElementById('folderPermsModal');
-        if (existing) existing.remove();
-
-        // Add modal to body
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-
-        // Show modal
-        const modal = new bootstrap.Modal(document.getElementById('folderPermsModal'));
-        modal.show();
-
-        // Cleanup on hide
-        document.getElementById('folderPermsModal').addEventListener('hidden.bs.modal', function() {
-            this.remove();
-        });
+        this._renderFolderList(this.sharedFolders, 'sharedFoldersContent', 'shared');
     }
 
     /**

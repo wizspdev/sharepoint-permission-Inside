@@ -185,11 +185,27 @@ class SharePointAPI {
      * Παίρνει folders από ένα library
      */
     async getFolders(siteUrl, libraryName, folderPath = '') {
+        const selectFields = [
+            'Name',
+            'ServerRelativeUrl',
+            'ItemCount',
+            'TimeCreated',
+            'TimeLastModified',
+            'ListItemAllFields/HasUniqueRoleAssignments',
+            'ListItemAllFields/Author/Title',
+            'ListItemAllFields/Author/Email',
+            'ListItemAllFields/Author/Id'
+        ].join(',');
+
+        const expandFields = [
+            'ListItemAllFields/Author'
+        ].join(',');
+
         let url;
         if (folderPath) {
-            url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${folderPath}')/Folders?$select=Name,ServerRelativeUrl,ItemCount,TimeCreated,TimeLastModified`;
+            url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${folderPath}')/Folders?$select=${selectFields}&$expand=${expandFields}`;
         } else {
-            url = `${siteUrl}/_api/web/lists/getbytitle('${libraryName}')/RootFolder/Folders?$select=Name,ServerRelativeUrl,ItemCount,TimeCreated,TimeLastModified`;
+            url = `${siteUrl}/_api/web/lists/getbytitle('${libraryName}')/RootFolder/Folders?$select=${selectFields}&$expand=${expandFields}`;
         }
         
         const data = await this.get(url);
@@ -382,6 +398,45 @@ class SharePointAPI {
             
         } catch (error) {
             this.logError('Failed to get shared folders', error);
+            return [];
+        }
+    }
+
+    /**
+     * Παίρνει όλους τους φακέλους από ένα site με βασικά metadata
+     */
+    async getAllFoldersDetailed(siteUrl) {
+        try {
+            const lists = await this.getSiteLists(siteUrl);
+            const allFolders = [];
+
+            for (const list of lists) {
+                if (list.BaseType !== 1) continue; // Μόνο document libraries
+
+                try {
+                    const folders = await this.getFoldersRecursive(siteUrl, list.RootFolder.ServerRelativeUrl);
+                    for (const folder of folders) {
+                        const author = folder.ListItemAllFields?.Author;
+                        allFolders.push({
+                            ...folder,
+                            library: list.Title,
+                            siteUrl,
+                            createdBy: author ? {
+                                id: author.Id,
+                                name: author.Title,
+                                email: author.Email
+                            } : null,
+                            hasUniquePermissions: folder.ListItemAllFields?.HasUniqueRoleAssignments ?? false
+                        });
+                    }
+                } catch (error) {
+                    this.logWarn(`Failed to process folders for ${list.Title}`, error);
+                }
+            }
+
+            return allFolders;
+        } catch (error) {
+            this.logError('Failed to get folders metadata', error);
             return [];
         }
     }
