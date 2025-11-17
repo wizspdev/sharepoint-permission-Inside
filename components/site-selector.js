@@ -619,7 +619,15 @@ class SiteSelectorComponent {
     }
 
     _normalizeUrl(url = '') {
-        return url ? url.trim().toLowerCase() : '';
+        if (!url) return '';
+
+        try {
+            const parsed = new URL(url.trim());
+            const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+            return `${parsed.origin}${normalizedPath}`.toLowerCase();
+        } catch {
+            return url.trim().toLowerCase().replace(/\/+$/, '');
+        }
     }
 
     /**
