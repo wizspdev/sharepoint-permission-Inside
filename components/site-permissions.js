@@ -475,6 +475,12 @@ class SitePermissionsComponent {
         // Site filter dropdown (multi-site mode)
         const siteFilterDropdown = document.getElementById('sitePermsSiteFilterDropdown');
         if (siteFilterDropdown) {
+            const stopPropagation = (event) => {
+                event.stopPropagation();
+            };
+            ['click', 'mousedown', 'mouseup', 'touchstart'].forEach(eventName => {
+                siteFilterDropdown.addEventListener(eventName, stopPropagation);
+            });
             siteFilterDropdown.addEventListener('change', (e) => {
                 this._filterPermissionsBySite(e.target.value);
             });
@@ -716,8 +722,8 @@ class SitePermissionsComponent {
         const uniqueSites = [...new Set(this.permissions.map(p => p.siteUrl || p.siteName))].filter(s => s);
         
         if (uniqueSites.length <= 1) {
-            // Fallback to simple header
-            return '<th class="sortable" data-column="siteName">Site <i class="bi ' + this._getSortIcon('siteName') + '"></i></th>';
+            // Fallback to simple header χωρίς sorting
+            return '<th>Site</th>';
         }
 
         // Build dropdown options
@@ -728,8 +734,8 @@ class SitePermissionsComponent {
         }).join('');
 
         return `
-            <th class="sortable" data-column="siteName">
-                Site <i class="bi ${this._getSortIcon('siteName')}"></i>
+            <th>
+                Site
                 <select id="sitePermsSiteFilterDropdown" class="form-select form-select-sm mt-1">
                     <option value="">Όλα (${this.permissions.length})</option>
                     ${options}
