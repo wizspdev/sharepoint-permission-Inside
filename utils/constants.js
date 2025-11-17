@@ -72,7 +72,7 @@ const PERMISSION_LEVELS = {
             Low: '1'
         },
         icon: 'bi-lock',
-        color: 'muted',
+        color: 'dark',
         description: 'Περιορισμένη πρόσβαση - Ελάχιστα δικαιώματα',
         weight: 50
     },
