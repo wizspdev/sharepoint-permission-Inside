@@ -251,7 +251,11 @@ class SitePermissionsComponent {
             
             // Process permissions
             console.log('Processing permissions...');
-            this.permissions = await this._processPermissions(roleAssignments, siteUrl);
+            this.permissions = (await this._processPermissions(roleAssignments, siteUrl)).map(p => ({
+                ...p,
+                siteUrl,
+                siteName: this._getSiteName(siteUrl)
+            }));
             this.filteredPermissions = [...this.permissions];
             
             // Sort and render
@@ -330,12 +334,110 @@ class SitePermissionsComponent {
                     <p class="mt-2">Δεν βρέθηκαν δικαιώματα</p>
                 </div>
             `;
+            document.getElementById('sitePermsPagination').innerHTML = '';
             return;
         }
 
-        // Paginate
-        const paginated = paginateArray(this.filteredPermissions, this.currentPage, this.pageSize);
+        const groupedPermissions = this._groupPermissionsBySite();
+        const accordionId = 'sitePermissionsAccordion';
+        const hasMultipleSites = groupedPermissions.length > 1;
 
+        let html = '';
+
+        if (hasMultipleSites) {
+            html += `
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Φίλτρο Site</label>
+                    <select id="sitePermsSiteFilterDropdown" class="form-select form-select-sm mt-1">
+                        <option value="">Όλα (${this.filteredPermissions.length})</option>
+                        ${groupedPermissions.map(group => `
+                            <option value="${escapeHtml(group.siteUrl || '')}">
+                                ${escapeHtml(group.siteName || 'Site')} (${group.permissions.length})
+                            </option>
+                        `).join('')}
+                    </select>
+                </div>
+            `;
+        }
+
+        html += `<div class="accordion" id="${accordionId}">`;
+
+        groupedPermissions.forEach((group, index) => {
+            const collapseId = `${accordionId}-collapse-${index}`;
+            const headerId = `${accordionId}-header-${index}`;
+            const isOpen = groupedPermissions.length === 1 ? 'show' : '';
+            const buttonCollapsed = groupedPermissions.length === 1 ? '' : 'collapsed';
+
+            html += `
+                <div class="accordion-item" data-site-url="${escapeHtml(group.siteUrl || '')}">
+                    <h2 class="accordion-header" id="${headerId}">
+                        <button class="accordion-button ${buttonCollapsed}" type="button" data-bs-toggle="collapse" data-bs-target="#${collapseId}">
+                            <div class="w-100">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>${escapeHtml(group.siteName || 'Site')}</strong>
+                                        ${group.siteUrl ? `<br><small class="text-muted">${escapeHtml(group.siteUrl)}</small>` : ''}
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge bg-primary me-2">
+                                            ${group.permissions.length} ${group.permissions.length === 1 ? 'δικαίωμα' : 'δικαιώματα'}
+                                        </span>
+                                        ${this._renderSiteSummaryBadges(group.permissions)}
+                                    </div>
+                                </div>
+                            </div>
+                        </button>
+                    </h2>
+                    <div id="${collapseId}" class="accordion-collapse collapse ${isOpen}" data-bs-parent="#${accordionId}">
+                        <div class="accordion-body">
+                            ${this._renderSitePermissionsTable(group.permissions)}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `</div>
+            <div class="mt-3 text-end">
+                <button class="btn btn-primary" id="addSitePermBtn">
+                    <i class="bi ${ICONS.add}"></i> Προσθήκη Δικαιώματος
+                </button>
+            </div>`;
+
+        tableContainer.innerHTML = html;
+
+        // Attach event listeners
+        this._attachTableEventListeners();
+
+        // No numbered pagination with accordion view
+        const paginationContainer = document.getElementById('sitePermsPagination');
+        if (paginationContainer) {
+            paginationContainer.innerHTML = '';
+        }
+    }
+
+    _groupPermissionsBySite() {
+        const groups = new Map();
+        const defaultSiteUrl = this.currentSite || (this.currentSites.length ? this.currentSites[0] : '');
+        const defaultSiteName = this._getSiteName(defaultSiteUrl);
+
+        for (const perm of this.filteredPermissions) {
+            const siteUrl = perm.siteUrl || defaultSiteUrl;
+            const siteName = perm.siteName || this._getSiteName(siteUrl) || defaultSiteName;
+            if (!groups.has(siteUrl)) {
+                groups.set(siteUrl, {
+                    siteUrl,
+                    siteName,
+                    permissions: []
+                });
+            }
+            groups.get(siteUrl).permissions.push(perm);
+        }
+
+        return Array.from(groups.values()).sort((a, b) => (a.siteName || '').localeCompare(b.siteName || ''));
+    }
+
+    _renderSitePermissionsTable(sitePermissions) {
         let html = `
             <div class="table-responsive">
                 <table class="table table-hover">
@@ -350,19 +452,20 @@ class SitePermissionsComponent {
                             <th class="sortable" data-column="email">
                                 Email <i class="bi ${this._getSortIcon('email')}"></i>
                             </th>
-                            ${this.isMultiSite ? this._renderSiteFilterHeader() : ''}
                             <th>Δικαιώματα</th>
                             <th>Ενέργειες</th>
                         </tr>
                     </thead>
-                    <tbody id="sitePermissionsTableBody">
+                    <tbody>
         `;
 
-        for (const perm of paginated.data) {
-            const isGroup = perm.principalTypeValue === 8; // SharePoint Group
+        for (const perm of sitePermissions) {
+            const isGroup = perm.principalTypeValue === 8;
             const groupClickable = isGroup ? 'cursor-pointer text-primary' : '';
-            const groupDataAttrs = isGroup ? `data-group-name="${escapeHtml(perm.principalName)}" data-principal-id="${perm.principalId}" data-site-url="${escapeHtml(perm.siteUrl || this.currentSite)}"` : '';
-            
+            const groupDataAttrs = isGroup 
+                ? `data-group-name="${escapeHtml(perm.principalName)}" data-principal-id="${perm.principalId}" data-site-url="${escapeHtml(perm.siteUrl || this.currentSite)}"`
+                : '';
+
             html += `
                 <tr>
                     <td>
@@ -371,11 +474,8 @@ class SitePermissionsComponent {
                         ${escapeHtml(perm.principalName)}
                         ${isGroup ? '</span>' : ''}
                     </td>
-                    <td>
-                        <span class="badge bg-secondary">${perm.principalType}</span>
-                    </td>
+                    <td><span class="badge bg-secondary">${perm.principalType}</span></td>
                     <td>${escapeHtml(perm.email)}</td>
-                    ${this.isMultiSite ? `<td><small class="text-muted">${escapeHtml(perm.siteName || '')}</small></td>` : ''}
                     <td>${this._renderRoleBadges(perm.roles)}</td>
                     <td>
                         ${!this.isMultiSite ? `
@@ -401,27 +501,23 @@ class SitePermissionsComponent {
                     </tbody>
                 </table>
             </div>
-            <div class="d-flex justify-content-between align-items-center mt-3">
-                <div class="text-muted">
-                    Εμφάνιση ${(paginated.currentPage - 1) * this.pageSize + 1} - 
-                    ${Math.min(paginated.currentPage * this.pageSize, paginated.totalItems)} 
-                    από ${paginated.totalItems}
-                </div>
-                <div>
-                    <button class="btn btn-primary" id="addSitePermBtn">
-                        <i class="bi ${ICONS.add}"></i> Προσθήκη Δικαιώματος
-                    </button>
-                </div>
-            </div>
         `;
 
-        tableContainer.innerHTML = html;
+        return html;
+    }
 
-        // Attach event listeners
-        this._attachTableEventListeners();
+    _renderSiteSummaryBadges(sitePermissions) {
+        const groups = sitePermissions.filter(p => p.principalTypeValue === 8).length;
+        const users = sitePermissions.length - groups;
 
-        // Render pagination
-        this._renderPagination(paginated);
+        return `
+            <span class="badge bg-info me-2">
+                <i class="bi ${ICONS.user}"></i> ${users} χρήστες
+            </span>
+            <span class="badge bg-secondary">
+                <i class="bi ${ICONS.group}"></i> ${groups} groups
+            </span>
+        `;
     }
 
     /**
@@ -496,34 +592,29 @@ class SitePermissionsComponent {
      * Filter permissions table by site
      */
     _filterPermissionsBySite(siteUrl) {
-        const tableBody = document.getElementById('sitePermissionsTableBody');
-        if (!tableBody) return;
+        const accordion = document.getElementById('sitePermissionsAccordion');
+        if (!accordion) return;
 
-        const rows = tableBody.querySelectorAll('tr');
+        const items = accordion.querySelectorAll('.accordion-item');
         
         if (!siteUrl) {
-            // Show all
-            rows.forEach(row => row.style.display = '');
-            console.log('Showing all permissions');
+            items.forEach(item => item.style.display = '');
+            console.log('Showing all sites');
             return;
         }
 
-        // Filter by site
         let visibleCount = 0;
-        this.permissions.forEach((perm, index) => {
-            const row = rows[index];
-            if (row) {
-                const permSiteUrl = perm.siteUrl || perm.siteName;
-                if (permSiteUrl === siteUrl) {
-                    row.style.display = '';
-                    visibleCount++;
-                } else {
-                    row.style.display = 'none';
-                }
+        items.forEach(item => {
+            const itemSiteUrl = item.dataset.siteUrl;
+            if (itemSiteUrl === siteUrl) {
+                item.style.display = '';
+                visibleCount++;
+            } else {
+                item.style.display = 'none';
             }
         });
 
-        console.log(`Filtered to ${visibleCount} permissions from ${this._extractSiteName(siteUrl)}`);
+        console.log(`Filtered to ${visibleCount} sites for ${this._extractSiteName(siteUrl)}`);
     }
 
     /**
