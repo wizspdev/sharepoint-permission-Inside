@@ -558,6 +558,19 @@ class FoldersCombinedComponent {
                 excludedLower.add(name.toLowerCase());
             }
         });
+        const disallowedFolderNames = new Set([
+            'forms',
+            'form templates',
+            '_cts',
+            'attachments',
+            'site assets'
+        ]);
+        const disallowedFoldersConfig = this.config?.sharepoint?.disallowedFolders || [];
+        disallowedFoldersConfig.forEach(name => {
+            if (name) {
+                disallowedFolderNames.add(name.toLowerCase());
+            }
+        });
         const customOnlyPattern = this.config?.sharepoint?.customLibrariesOnlyPattern 
             ? new RegExp(this.config.sharepoint.customLibrariesOnlyPattern, 'i')
             : null;
@@ -565,9 +578,17 @@ class FoldersCombinedComponent {
         return folders.filter(folder => {
             const libraryName = (folder.library || '').trim();
             const lowerName = libraryName.toLowerCase();
+            const folderName = (folder.Name || '').trim().toLowerCase();
+            const serverRelativeUrl = (folder.ServerRelativeUrl || '').toLowerCase();
 
             if (!libraryName) return false;
             if (excludedLower.has(lowerName)) {
+                return false;
+            }
+            if (disallowedFolderNames.has(folderName)) {
+                return false;
+            }
+            if (serverRelativeUrl.includes('/forms/')) {
                 return false;
             }
             if (customOnlyPattern) {

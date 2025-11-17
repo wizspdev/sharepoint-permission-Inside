@@ -66,7 +66,12 @@ const CONFIG = {
             'Images',
             'Imagine activă',
             'Redare video'
-          ],
+        ],
+        disallowedFolders: [
+            'Forms',
+            'Form Templates',
+            '_cts'
+        ],
         // API Version
         apiVersion: 'v1.0'
     },
