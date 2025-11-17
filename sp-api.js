@@ -203,7 +203,8 @@ class SharePointAPI {
 
         let url;
         if (folderPath) {
-            url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${folderPath}')/Folders?$select=${selectFields}&$expand=${expandFields}`;
+            const encodedPath = this._encodeServerRelativeUrl(folderPath);
+            url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${encodedPath}')/Folders?$select=${selectFields}&$expand=${expandFields}`;
         } else {
             url = `${siteUrl}/_api/web/lists/getbytitle('${libraryName}')/RootFolder/Folders?$select=${selectFields}&$expand=${expandFields}`;
         }
@@ -216,7 +217,8 @@ class SharePointAPI {
      * Παίρνει permissions για ένα συγκεκριμένο folder
      */
     async getFolderPermissions(siteUrl, folderPath) {
-        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${folderPath}')/ListItemAllFields/RoleAssignments?$expand=Member,RoleDefinitionBindings&$select=Member/Title,Member/PrincipalType,Member/Id,Member/LoginName,RoleDefinitionBindings/Name,RoleDefinitionBindings/Id`;
+        const encodedPath = this._encodeServerRelativeUrl(folderPath);
+        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${encodedPath}')/ListItemAllFields/RoleAssignments?$expand=Member,RoleDefinitionBindings&$select=Member/Title,Member/PrincipalType,Member/Id,Member/LoginName,RoleDefinitionBindings/Name,RoleDefinitionBindings/Id`;
         
         try {
             const data = await this.get(url);
@@ -234,7 +236,8 @@ class SharePointAPI {
      * Ελέγχει αν ένας folder έχει unique permissions
      */
     async hasUniquePermissions(siteUrl, folderPath) {
-        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${folderPath}')/ListItemAllFields/HasUniqueRoleAssignments`;
+        const encodedPath = this._encodeServerRelativeUrl(folderPath);
+        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${encodedPath}')/ListItemAllFields/HasUniqueRoleAssignments`;
         
         try {
             const data = await this.get(url);
@@ -254,7 +257,8 @@ class SharePointAPI {
      * Παίρνει folder properties
      */
     async getFolderProperties(siteUrl, folderPath) {
-        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${folderPath}')?$select=Name,ServerRelativeUrl,ItemCount,TimeCreated,TimeLastModified&$expand=ListItemAllFields,Properties`;
+        const encodedPath = this._encodeServerRelativeUrl(folderPath);
+        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${encodedPath}')?$select=Name,ServerRelativeUrl,ItemCount,TimeCreated,TimeLastModified&$expand=ListItemAllFields,Properties`;
         
         try {
             const data = await this.get(url);
@@ -270,7 +274,8 @@ class SharePointAPI {
      */
     async getFolderSharingLinks(siteUrl, folderPath) {
         // Χρησιμοποιούμε το sharing API
-        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${folderPath}')/ListItemAllFields/GetSharingInformation?$expand=permissionsInformation,pickerSettings`;
+        const encodedPath = this._encodeServerRelativeUrl(folderPath);
+        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${encodedPath}')/ListItemAllFields/GetSharingInformation?$expand=permissionsInformation,pickerSettings`;
         
         try {
             const data = await this.get(url, false); // Δεν κάνουμε cache τα sharing links
@@ -301,7 +306,8 @@ class SharePointAPI {
      * Προσθέτει permissions σε folder
      */
     async addFolderPermission(siteUrl, folderPath, principalId, roleDefId) {
-        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${folderPath}')/ListItemAllFields/roleassignments/addroleassignment(principalid=${principalId},roledefid=${roleDefId})`;
+        const encodedPath = this._encodeServerRelativeUrl(folderPath);
+        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${encodedPath}')/ListItemAllFields/roleassignments/addroleassignment(principalid=${principalId},roledefid=${roleDefId})`;
         return await this.post(url, {});
     }
 
@@ -309,7 +315,8 @@ class SharePointAPI {
      * Αφαιρεί permissions από folder
      */
     async removeFolderPermission(siteUrl, folderPath, principalId) {
-        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${folderPath}')/ListItemAllFields/roleassignments/removeroleassignment(principalid=${principalId})`;
+        const encodedPath = this._encodeServerRelativeUrl(folderPath);
+        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${encodedPath}')/ListItemAllFields/roleassignments/removeroleassignment(principalid=${principalId})`;
         return await this.delete(url);
     }
 
@@ -317,7 +324,8 @@ class SharePointAPI {
      * Break permission inheritance για folder
      */
     async breakFolderInheritance(siteUrl, folderPath, copyRoleAssignments = true) {
-        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${folderPath}')/ListItemAllFields/breakroleinheritance(copyroleassignments=${copyRoleAssignments},clearsubscopes=true)`;
+        const encodedPath = this._encodeServerRelativeUrl(folderPath);
+        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${encodedPath}')/ListItemAllFields/breakroleinheritance(copyroleassignments=${copyRoleAssignments},clearsubscopes=true)`;
         return await this.post(url, {});
     }
 
@@ -325,7 +333,8 @@ class SharePointAPI {
      * Restore permission inheritance για folder
      */
     async restoreFolderInheritance(siteUrl, folderPath) {
-        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${folderPath}')/ListItemAllFields/resetroleinheritance`;
+        const encodedPath = this._encodeServerRelativeUrl(folderPath);
+        const url = `${siteUrl}/_api/web/GetFolderByServerRelativeUrl('${encodedPath}')/ListItemAllFields/resetroleinheritance`;
         return await this.post(url, {});
     }
 
@@ -535,6 +544,14 @@ class SharePointAPI {
         }
         keysToDelete.forEach(key => this.cache.delete(key));
         this.logInfo('Cleared cache for site', siteUrl);
+    }
+
+    _encodeServerRelativeUrl(path = '') {
+        if (!path) return '';
+        return encodeURIComponent(path)
+            .replace(/%2F/gi, '/')
+            .replace(/%5C/gi, '/')
+            .replace(/%3A/gi, ':');
     }
 
     /**
