@@ -169,10 +169,10 @@ class SiteSelectorComponent {
             displayName: s.name,
             name: s.name
         }));
-        const teamProjectSites = this._getTeamProjectSites();
+        const normalizedAllSites = this.allSites?.length ? this.allSites : [];
         const sitesToShow = this._mergeUniqueSites([
             ...defaultSiteOptions,
-            ...teamProjectSites
+            ...normalizedAllSites
         ]);
 
         if (!sitesToShow || sitesToShow.length === 0) {
@@ -220,13 +220,7 @@ class SiteSelectorComponent {
             // Φόρτωση όλων των sites από Graph API
             try {
                 const sites = await this.graphAPI.getAllSites({ top: 300 });
-                const normalizedDefaults = this.defaultSites.map(s => ({
-                    webUrl: s.url,
-                    displayName: s.name,
-                    name: s.name
-                }));
                 this.allSites = this._mergeUniqueSites([
-                    ...normalizedDefaults,
                     ...(sites || [])
                 ]);
                 this.logInfo(`Loaded ${this.allSites.length} sites from Graph API`);
@@ -597,24 +591,6 @@ class SiteSelectorComponent {
         }
     }
 
-    _getTeamProjectSites() {
-        if (!this.allSites || this.allSites.length === 0) return [];
-
-        const defaultUrls = new Set(this.defaultSites.map(s => this._normalizeUrl(s.url)));
-
-        return this.allSites
-            .filter(site => {
-                const url = this._normalizeUrl(site.webUrl || site.url);
-                if (!url || defaultUrls.has(url)) return false;
-                return this._isTeamOrProjectSite(site);
-            })
-            .map(site => ({
-                webUrl: site.webUrl || site.url,
-                displayName: site.displayName || site.name || this._extractSiteName(site.webUrl || site.url),
-                name: site.name || site.displayName || this._extractSiteName(site.webUrl || site.url)
-            }));
-    }
-
     _mergeUniqueSites(sites = []) {
         const seen = new Set();
         const merged = [];
@@ -631,17 +607,6 @@ class SiteSelectorComponent {
         });
 
         return merged;
-    }
-
-    _isTeamOrProjectSite(site = {}) {
-        const combined = `${site.displayName || ''} ${site.name || ''} ${site.webUrl || ''}`.toLowerCase();
-        const teamKeywords = ['team', 'teams'];
-        const projectKeywords = ['project', 'projects', 'proj'];
-
-        const isTeam = teamKeywords.some(keyword => combined.includes(keyword));
-        const isProject = projectKeywords.some(keyword => combined.includes(keyword));
-
-        return isTeam || isProject;
     }
 
     _normalizeUrl(url = '') {
