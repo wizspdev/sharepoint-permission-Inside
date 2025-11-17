@@ -542,7 +542,20 @@ class FoldersCombinedComponent {
             'wizsp',
             'WIZSP'
         ];
-        return folders.filter(folder => !excludedLists.includes(folder.library));
+        const customOnlyPattern = this.config?.sharepoint?.customLibrariesOnlyPattern 
+            ? new RegExp(this.config.sharepoint.customLibrariesOnlyPattern, 'i')
+            : null;
+        return folders.filter(folder => {
+            const libraryName = folder.library || '';
+            if (excludedLists.includes(libraryName)) {
+                return false;
+            }
+            if (customOnlyPattern) {
+                return customOnlyPattern.test(libraryName);
+            }
+            return libraryName.toLowerCase() !== 'documents' &&
+                   !libraryName.toLowerCase().startsWith('document');
+        });
     }
 }
 
