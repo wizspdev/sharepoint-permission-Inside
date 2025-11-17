@@ -170,23 +170,40 @@ class GroupMembersModal {
                 <h6 class="mt-3 mb-2">
                     <i class="bi bi-people"></i> Ομάδες (${groups.length})
                 </h6>
-                <div class="list-group">
+                <div class="accordion" id="groupMembersGroupsAccordion">
             `;
 
-            for (const group of groups) {
+            groups.forEach((group, index) => {
+                const collapseId = `groupMembersGroup-${group.Id || index}`;
                 html += `
-                    <div class="list-group-item">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <i class="bi bi-people-fill me-2"></i>
-                                <strong>${escapeHtml(group.Title)}</strong>
+                    <div class="accordion-item" data-group-index="${index}">
+                        <h2 class="accordion-header" id="${collapseId}-header">
+                            <button class="accordion-button collapsed" type="button"
+                                    data-bs-toggle="collapse"
+                                    data-group-index="${index}"
+                                    data-bs-target="#${collapseId}">
+                                <div class="w-100">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <i class="bi bi-people-fill me-2"></i>
+                                            <strong>${escapeHtml(group.Title)}</strong>
+                                        </div>
+                                        <span class="badge bg-secondary">${this._getPrincipalTypeName(group.PrincipalType)}</span>
+                                    </div>
+                                    ${group.Email ? `<small class="text-muted">${escapeHtml(group.Email)}</small>` : ''}
+                                </div>
+                            </button>
+                        </h2>
+                        <div id="${collapseId}" class="accordion-collapse collapse"
+                             data-bs-parent="#groupMembersGroupsAccordion"
+                             data-group-index="${index}">
+                            <div class="accordion-body">
+                                <div class="text-muted small">Ανοίξτε για να δείτε τα μέλη της ομάδας.</div>
                             </div>
-                            <span class="badge bg-secondary">${this._getPrincipalTypeName(group.PrincipalType)}</span>
                         </div>
-                        ${group.Email ? `<small class="text-muted">${escapeHtml(group.Email)}</small>` : ''}
                     </div>
                 `;
-            }
+            });
 
             html += '</div>';
         }
@@ -194,6 +211,10 @@ class GroupMembersModal {
         html += '</div>';
 
         container.innerHTML = html;
+
+        if (groups.length > 0) {
+            this._attachGroupAccordionListeners(groups);
+        }
     }
 
     /**
@@ -215,6 +236,167 @@ class GroupMembersModal {
             case 8: return 'SharePoint Group';
             default: return 'Other';
         }
+    }
+
+    /**
+     * Attach accordion listeners για nested groups
+     */
+    _attachGroupAccordionListeners(groups) {
+        const accordion = document.getElementById('groupMembersGroupsAccordion');
+        if (!accordion) return;
+
+        accordion.querySelectorAll('.accordion-collapse').forEach(collapse => {
+            collapse.addEventListener('show.bs.collapse', async (event) => {
+                const target = event.currentTarget;
+                if (target.dataset.loaded === 'true') return;
+                const index = parseInt(target.dataset.groupIndex, 10);
+                const group = groups[index];
+                const body = target.querySelector('.accordion-body');
+                await this._loadNestedGroupMembers(group, body);
+                target.dataset.loaded = 'true';
+            });
+        });
+    }
+
+    /**
+     * Load nested group members (SharePoint group or Azure AD group)
+     */
+    async _loadNestedGroupMembers(group, container) {
+        if (!container || !group) return;
+
+        container.innerHTML = `
+            <div class="text-center py-2">
+                <div class="spinner-border spinner-border-sm" role="status"></div>
+                <p class="text-muted small mt-2 mb-0">Φόρτωση μελών...</p>
+            </div>
+        `;
+
+        try {
+            if (group.PrincipalType === 8) {
+                const members = await this.spAPI.getGroupMembers(this.currentSiteUrl, group.Id);
+                container.innerHTML = this._renderNestedMembersTable(members);
+            } else if (group.PrincipalType === 4) {
+                const members = await this._loadAzureADGroupMembers(group);
+                container.innerHTML = this._renderAADGroupMembers(members);
+            } else {
+                container.innerHTML = `
+                    <div class="alert alert-info mb-0">
+                        <i class="bi bi-info-circle"></i>
+                        Η προβολή μελών υποστηρίζεται μόνο για SharePoint και Azure AD groups.
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Failed to load nested group members', error);
+            container.innerHTML = `
+                <div class="alert alert-danger mb-0">
+                    <i class="bi bi-x-circle"></i>
+                    Αποτυχία φόρτωσης μελών: ${escapeHtml(error.message)}
+                </div>
+            `;
+        }
+    }
+
+    /**
+     * Load Azure AD group members using Graph API
+     */
+    async _loadAzureADGroupMembers(group) {
+        const query = group.Email || group.Title;
+        if (!query) {
+            throw new Error('Δεν υπάρχει email για την ομάδα');
+        }
+
+        const results = await this.graphAPI.searchGroups(query, 1);
+        if (!results || results.length === 0) {
+            throw new Error('Η ομάδα δεν βρέθηκε στο Azure AD');
+        }
+
+        const matchedGroup = results.find(g => g.mail?.toLowerCase() === query.toLowerCase()) || results[0];
+        if (!matchedGroup?.id) {
+            throw new Error('Αδυναμία ανάκτησης Azure AD group ID');
+        }
+
+        const members = await this.graphAPI.getGroupMembers(matchedGroup.id);
+        return members;
+    }
+
+    /**
+     * Render nested SharePoint group members table
+     */
+    _renderNestedMembersTable(members) {
+        if (!members || members.length === 0) {
+            return `<div class="text-muted small">Η ομάδα δεν έχει μέλη.</div>`;
+        }
+
+        let html = `
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Όνομα</th>
+                            <th>Email</th>
+                            <th>Login Name</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        members.forEach(member => {
+            const email = member.Email || this._extractEmailFromLogin(member.LoginName);
+            html += `
+                <tr>
+                    <td>${escapeHtml(member.Title)}</td>
+                    <td>${escapeHtml(email || '-')}</td>
+                    <td><small class="text-muted">${escapeHtml(member.LoginName || '-')}</small></td>
+                </tr>
+            `;
+        });
+
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        return html;
+    }
+
+    /**
+     * Render Azure AD group members
+     */
+    _renderAADGroupMembers(members) {
+        if (!members || members.length === 0) {
+            return `<div class="text-muted small">Η ομάδα δεν έχει μέλη στο Azure AD.</div>`;
+        }
+
+        let html = `
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Όνομα</th>
+                            <th>Email</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        members.forEach(member => {
+            html += `
+                <tr>
+                    <td>${escapeHtml(member.displayName || member.userPrincipalName || '-')}</td>
+                    <td>${escapeHtml(member.mail || member.userPrincipalName || '-')}</td>
+                </tr>
+            `;
+        });
+
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        return html;
     }
 }
 
