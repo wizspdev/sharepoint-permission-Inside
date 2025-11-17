@@ -403,12 +403,12 @@ class SharePointAPI {
     }
 
     /**
-     * Παίρνει όλους τους φακέλους από ένα site με βασικά metadata
+     * Παίρνει φακέλους grouped ανά document library (όπως στο modal)
      */
-    async getAllFoldersDetailed(siteUrl) {
+    async getFoldersGroupedByLibrary(siteUrl) {
         try {
             const lists = await this.getSiteLists(siteUrl);
-            const allFolders = [];
+            const groupedFolders = [];
 
             for (const list of lists) {
                 if (list.BaseType !== 1) continue; // Μόνο document libraries
@@ -417,7 +417,7 @@ class SharePointAPI {
                     const folders = await this.getFoldersRecursive(siteUrl, list.RootFolder.ServerRelativeUrl);
                     for (const folder of folders) {
                         const author = folder.ListItemAllFields?.Author;
-                        allFolders.push({
+                        groupedFolders.push({
                             ...folder,
                             library: list.Title,
                             siteUrl,
@@ -426,7 +426,8 @@ class SharePointAPI {
                                 name: author.Title,
                                 email: author.Email
                             } : null,
-                            hasUniquePermissions: folder.ListItemAllFields?.HasUniqueRoleAssignments ?? false
+                            hasUniquePermissions: folder.ListItemAllFields?.HasUniqueRoleAssignments ?? false,
+                            serverRelativeUrl: folder.ServerRelativeUrl
                         });
                     }
                 } catch (error) {
@@ -434,9 +435,9 @@ class SharePointAPI {
                 }
             }
 
-            return allFolders;
+            return groupedFolders;
         } catch (error) {
-            this.logError('Failed to get folders metadata', error);
+            this.logError('Failed to get folders grouped by library', error);
             return [];
         }
     }

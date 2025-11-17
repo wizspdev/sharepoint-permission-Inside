@@ -108,8 +108,8 @@ class FoldersCombinedComponent {
             
             for (const siteUrl of siteUrls) {
                 try {
-                    const folders = await this.spAPI.getAllFoldersDetailed(siteUrl);
-                    const filtered = this._filterExcludedLists(folders);
+                    const libraryFolders = await this.spAPI.getFoldersGroupedByLibrary(siteUrl);
+                    const filtered = this._filterExcludedLists(libraryFolders);
                     
                     filtered.forEach(folder => {
                         folder.siteUrl = siteUrl;
@@ -158,7 +158,7 @@ class FoldersCombinedComponent {
         try {
             console.log(`Loading folders for: ${siteUrl}`);
             
-            const folders = await this.spAPI.getAllFoldersDetailed(siteUrl);
+            const folders = await this.spAPI.getFoldersGroupedByLibrary(siteUrl);
             
             this.allFolders = this._filterExcludedLists(folders).map(folder => ({
                 ...folder,
