@@ -544,10 +544,8 @@ class FoldersCombinedComponent {
         ];
         const excludedLower = new Set(excludedLists.map(name => name.toLowerCase()));
         const defaultDisallowed = [
-            'documents',
-            'shared documents',
-            'document',
             'forms',
+            'form templates',
             'audio',
             'video',
             'images',
