@@ -59,7 +59,14 @@ const CONFIG = {
         monitoredSites: [
             'https://wiz365.sharepoint.com'
         ],
-
+        disallowedDocumentLibraries: [
+            'Forms',
+            'Audio',
+            'Video',
+            'Images',
+            'Imagine activă',
+            'Redare video'
+          ],
         // API Version
         apiVersion: 'v1.0'
     },
