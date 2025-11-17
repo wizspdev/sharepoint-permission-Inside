@@ -543,8 +543,19 @@ class FoldersCombinedComponent {
             'WIZSP'
         ];
         const excludedLower = new Set(excludedLists.map(name => name.toLowerCase()));
+        const defaultDisallowed = [
+            'documents',
+            'shared documents',
+            'document',
+            'forms',
+            'audio',
+            'video',
+            'images',
+            'imagine activă',
+            'redare video'
+        ];
         const disallowedConfig = this.config?.sharepoint?.disallowedDocumentLibraries || [];
-        disallowedConfig.forEach(name => {
+        [...defaultDisallowed, ...disallowedConfig].forEach(name => {
             if (name) {
                 excludedLower.add(name.toLowerCase());
             }
