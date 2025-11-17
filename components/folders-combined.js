@@ -15,6 +15,10 @@ class FoldersCombinedComponent {
         this.allFolders = [];
         this.sharedFolders = [];
         this.siteSelector = null;
+        this.rawFolders = [];
+        this.includeSystemFolders = false;
+        this.hiddenFolderCount = 0;
+        this.totalFolderCount = 0;
     }
 
     /**
@@ -31,6 +35,16 @@ class FoldersCombinedComponent {
                 <div class="card-body">
                     <!-- Site Selector -->
                     <div id="foldersCombinedSiteSelector"></div>
+
+                    <div class="d-flex flex-wrap justify-content-between align-items-center mt-2 gap-2">
+                        <div id="foldersFilterInfo" class="text-muted small"></div>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" id="foldersSystemToggle">
+                            <label class="form-check-label small" for="foldersSystemToggle">
+                                Εμφάνιση συστημικών φακέλων (Forms, _cts)
+                            </label>
+                        </div>
+                    </div>
                     
                     <!-- Tabs -->
                     <ul class="nav nav-tabs mt-3" role="tablist">
@@ -87,6 +101,12 @@ class FoldersCombinedComponent {
                 }
             }
         });
+
+        const systemToggle = document.getElementById('foldersSystemToggle');
+        systemToggle?.addEventListener('change', async (event) => {
+            this.includeSystemFolders = event.target.checked;
+            await this._refreshFolderData({ forceSharingRefresh: false });
+        });
     }
 
     /**
@@ -103,36 +123,26 @@ class FoldersCombinedComponent {
         try {
             console.log(`Loading folders from ${siteUrls.length} sites:`, siteUrls);
             
-            this.allFolders = [];
-            this.sharedFolders = [];
+            this.rawFolders = [];
             
             for (const siteUrl of siteUrls) {
                 try {
                     const libraryFolders = await this.spAPI.getFoldersGroupedByLibrary(siteUrl);
-                    const filtered = this._filterExcludedLists(libraryFolders);
-                    
-                    filtered.forEach(folder => {
+                    libraryFolders.forEach(folder => {
                         folder.siteUrl = siteUrl;
                         folder.siteName = this._extractSiteName(siteUrl);
                     });
-                    
-                    this.allFolders.push(...filtered);
+                    this.rawFolders.push(...libraryFolders);
                 } catch (error) {
                     console.error(`Failed to load folders from ${siteUrl}:`, error);
                 }
             }
-
-            await this._identifySharedFolders();
+            
+            await this._refreshFolderData({ forceSharingRefresh: true });
             
             clearTimeout(timeoutId);
             hideLoading();
-            
-            document.getElementById('allFoldersCount').textContent = this.allFolders.length;
-            document.getElementById('sharedFoldersCount').textContent = this.sharedFolders.length;
-            
-            this._renderAllFolders();
-            this._renderSharedFolders();
-            
+
             showNotification(`Φόρτωση ολοκληρώθηκε: ${this.allFolders.length} φάκελοι, ${this.sharedFolders.length} κοινόχρηστοι από ${siteUrls.length} sites`, 'success');
             
         } catch (error) {
@@ -160,25 +170,16 @@ class FoldersCombinedComponent {
             
             const folders = await this.spAPI.getFoldersGroupedByLibrary(siteUrl);
             
-            this.allFolders = this._filterExcludedLists(folders).map(folder => ({
+            this.rawFolders = folders.map(folder => ({
                 ...folder,
                 siteUrl,
                 siteName: this._extractSiteName(siteUrl)
             }));
             
-            this.sharedFolders = [];
-            await this._identifySharedFolders();
+            await this._refreshFolderData({ forceSharingRefresh: true });
             
             clearTimeout(timeoutId);
             hideLoading();
-            
-            // Update counts
-            document.getElementById('allFoldersCount').textContent = this.allFolders.length;
-            document.getElementById('sharedFoldersCount').textContent = this.sharedFolders.length;
-            
-            // Render both tabs
-            this._renderAllFolders();
-            this._renderSharedFolders();
             
             showNotification(`Φόρτωση ολοκληρώθηκε: ${this.allFolders.length} φάκελοι, ${this.sharedFolders.length} κοινόχρηστοι`, 'success');
             
@@ -193,10 +194,18 @@ class FoldersCombinedComponent {
     /**
      * Εντοπίζει τους κοινόχρηστους φακέλους
      */
-    async _identifySharedFolders() {
+    async _identifySharedFolders(options = {}) {
+        const { forceRefresh = false } = options;
         this.sharedFolders = [];
 
         for (const folder of this.allFolders) {
+            if (folder.sharingInfoLoaded && !forceRefresh) {
+                if (folder.isShared) {
+                    this.sharedFolders.push(folder);
+                }
+                continue;
+            }
+
             try {
                 const sharingInfo = await this.spAPI.getFolderSharingLinks(folder.siteUrl, folder.ServerRelativeUrl);
                 if (this._hasSharingLinks(sharingInfo)) {
@@ -212,7 +221,77 @@ class FoldersCombinedComponent {
                 folder.isShared = false;
                 folder.sharingInfo = null;
             }
+
+            folder.sharingInfoLoaded = true;
+
+            if (folder.isShared) {
+                this.sharedFolders.push(folder);
+            }
         }
+    }
+
+    /**
+     * Re-apply filters (e.g., after toggling system folders) και ενημέρωση UI
+     */
+    async _refreshFolderData({ forceSharingRefresh = false } = {}) {
+        if (!Array.isArray(this.rawFolders)) {
+            this.rawFolders = [];
+        }
+
+        this.totalFolderCount = this.rawFolders.length;
+
+        if (this.totalFolderCount === 0) {
+            this.allFolders = [];
+            this.sharedFolders = [];
+            this.hiddenFolderCount = 0;
+            this._updateCountsAndRender();
+            this._updateFilterInfo();
+            return;
+        }
+
+        this.allFolders = this._filterExcludedLists(this.rawFolders);
+        this.hiddenFolderCount = this.totalFolderCount - this.allFolders.length;
+
+        await this._identifySharedFolders({ forceRefresh: forceSharingRefresh });
+        this._updateCountsAndRender();
+        this._updateFilterInfo();
+    }
+
+    _updateCountsAndRender() {
+        const allCountEl = document.getElementById('allFoldersCount');
+        const sharedCountEl = document.getElementById('sharedFoldersCount');
+
+        if (allCountEl) {
+            allCountEl.textContent = this.allFolders.length;
+        }
+        if (sharedCountEl) {
+            sharedCountEl.textContent = this.sharedFolders.length;
+        }
+
+        this._renderAllFolders();
+        this._renderSharedFolders();
+    }
+
+    _updateFilterInfo() {
+        const infoEl = document.getElementById('foldersFilterInfo');
+        if (!infoEl) return;
+
+        if (this.totalFolderCount === 0) {
+            infoEl.textContent = '';
+            return;
+        }
+
+        if (this.hiddenFolderCount > 0 && !this.includeSystemFolders) {
+            infoEl.innerHTML = `<i class="bi ${ICONS.info}"></i> Φιλτράρονται ${this.hiddenFolderCount} συστημικοί φάκελοι. Ενεργοποιήστε την επιλογή για να τους προβάλετε.`;
+            return;
+        }
+
+        if (this.includeSystemFolders) {
+            infoEl.innerHTML = `<i class="bi ${ICONS.success}"></i> Προβάλλονται και οι συστημικοί φάκελοι.`;
+            return;
+        }
+
+        infoEl.textContent = '';
     }
 
     /**
@@ -598,11 +677,13 @@ class FoldersCombinedComponent {
             if (excludedLower.has(lowerName)) {
                 return false;
             }
-            if (disallowedFolderNames.has(folderName)) {
-                return false;
-            }
-            if (disallowedFolderPathPatterns.some(pattern => pattern.test(serverRelativeUrl))) {
-                return false;
+            if (!this.includeSystemFolders) {
+                if (disallowedFolderNames.has(folderName)) {
+                    return false;
+                }
+                if (disallowedFolderPathPatterns.some(pattern => pattern.test(serverRelativeUrl))) {
+                    return false;
+                }
             }
             if (customOnlyPattern) {
                 return customOnlyPattern.test(libraryName);
