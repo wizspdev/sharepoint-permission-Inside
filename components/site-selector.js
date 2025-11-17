@@ -235,30 +235,22 @@ class SiteSelectorComponent {
                 this.logInfo(`Loaded ${this.allSites.length} sites from Graph API`);
             } catch (error) {
                 this.logError('Failed to load sites from Graph API', error);
-                // Fallback: Use default sites + config sites as "all sites"
-                this.allSites = [
-                    ...this.defaultSites.map(s => ({
-                        webUrl: s.url,
-                        displayName: s.name,
-                        name: s.name
-                    })),
-                    ...this.config.sharepoint.monitoredSites.map(url => ({
+                const defaultUrlSet = new Set(this.defaultSites.map(s => this._normalizeUrl(s.url)));
+                const fallbackSites = this.config.sharepoint.monitoredSites
+                    .map(url => ({
                         webUrl: url,
                         displayName: this._extractSiteName(url),
                         name: this._extractSiteName(url)
                     }))
-                ];
-                // Remove duplicates
-                const uniqueSites = [];
-                const seen = new Set();
-                for (const site of this.allSites) {
-                    if (!seen.has(site.webUrl)) {
-                        seen.add(site.webUrl);
-                        uniqueSites.push(site);
-                    }
-                }
-                this.allSites = uniqueSites;
-                this.logInfo(`Using ${this.allSites.length} sites from config as fallback`);
+                    .filter(site => {
+                        const normalized = this._normalizeUrl(site.webUrl);
+                        return normalized && !defaultUrlSet.has(normalized);
+                    });
+
+                this.allSites = this._mergeUniqueSites([
+                    ...fallbackSites
+                ]);
+                this.logInfo(`Using ${this.allSites.length} unique fallback sites from config`);
             }
         } finally {
             this.loadingSites = false;
