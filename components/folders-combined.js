@@ -16,7 +16,7 @@ class FoldersCombinedComponent {
         this.sharedFolders = [];
         this.siteSelector = null;
         this.rawFolders = [];
-        this.includeSystemFolders = false;
+        this.includeSystemFolders = true;
         this.hiddenFolderCount = 0;
         this.totalFolderCount = 0;
     }
@@ -39,7 +39,7 @@ class FoldersCombinedComponent {
                     <div class="d-flex flex-wrap justify-content-between align-items-center mt-2 gap-2">
                         <div id="foldersFilterInfo" class="text-muted small"></div>
                         <div class="form-check form-switch mb-0">
-                            <input class="form-check-input" type="checkbox" id="foldersSystemToggle">
+                            <input class="form-check-input" type="checkbox" id="foldersSystemToggle" ${this.includeSystemFolders ? 'checked' : ''}>
                             <label class="form-check-label small" for="foldersSystemToggle">
                                 Εμφάνιση συστημικών φακέλων (Forms, _cts)
                             </label>
