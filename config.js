@@ -72,6 +72,10 @@ const CONFIG = {
             'Form Templates',
             '_cts'
         ],
+        disallowedFolderPathPatterns: [
+            '\\/Forms($|\\/)',
+            '\\/_cts($|\\/)'
+        ],
         // API Version
         apiVersion: 'v1.0'
     },

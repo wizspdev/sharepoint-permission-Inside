@@ -571,6 +571,19 @@ class FoldersCombinedComponent {
                 disallowedFolderNames.add(name.toLowerCase());
             }
         });
+        const disallowedFolderPathPatterns = [
+            /\/forms($|\/)/i,
+            /\/_cts($|\/)/i
+        ];
+        const configPathPatterns = (this.config?.sharepoint?.disallowedFolderPathPatterns || []).map(pattern => {
+            try {
+                return new RegExp(pattern, 'i');
+            } catch {
+                console.warn('[FoldersCombined] Invalid regex pattern in disallowedFolderPathPatterns:', pattern);
+                return null;
+            }
+        }).filter(Boolean);
+        disallowedFolderPathPatterns.push(...configPathPatterns);
         const customOnlyPattern = this.config?.sharepoint?.customLibrariesOnlyPattern 
             ? new RegExp(this.config.sharepoint.customLibrariesOnlyPattern, 'i')
             : null;
@@ -579,7 +592,7 @@ class FoldersCombinedComponent {
             const libraryName = (folder.library || '').trim();
             const lowerName = libraryName.toLowerCase();
             const folderName = (folder.Name || '').trim().toLowerCase();
-            const serverRelativeUrl = (folder.ServerRelativeUrl || '').toLowerCase();
+            const serverRelativeUrl = (folder.ServerRelativeUrl || folder.serverRelativeUrl || '').toLowerCase();
 
             if (!libraryName) return false;
             if (excludedLower.has(lowerName)) {
@@ -588,7 +601,7 @@ class FoldersCombinedComponent {
             if (disallowedFolderNames.has(folderName)) {
                 return false;
             }
-            if (serverRelativeUrl.includes('/forms/')) {
+            if (disallowedFolderPathPatterns.some(pattern => pattern.test(serverRelativeUrl))) {
                 return false;
             }
             if (customOnlyPattern) {
