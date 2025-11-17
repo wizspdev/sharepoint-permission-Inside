@@ -169,7 +169,12 @@ class SiteSelectorComponent {
             displayName: s.name,
             name: s.name
         }));
-        const normalizedAllSites = this.allSites?.length ? this.allSites : [];
+        const defaultUrlSet = new Set(this.defaultSites.map(s => this._normalizeUrl(s.url)));
+        const normalizedAllSites = (this.allSites?.length ? this.allSites : [])
+            .filter(site => {
+                const url = this._normalizeUrl(site.webUrl || site.url);
+                return url && !defaultUrlSet.has(url);
+            });
         const sitesToShow = this._mergeUniqueSites([
             ...defaultSiteOptions,
             ...normalizedAllSites
@@ -220,8 +225,12 @@ class SiteSelectorComponent {
             // Φόρτωση όλων των sites από Graph API
             try {
                 const sites = await this.graphAPI.getAllSites({ top: 300 });
+                const defaultUrlSet = new Set(this.defaultSites.map(s => this._normalizeUrl(s.url)));
                 this.allSites = this._mergeUniqueSites([
-                    ...(sites || [])
+                    ...(sites || []).filter(site => {
+                        const url = this._normalizeUrl(site.webUrl || site.url);
+                        return url && !defaultUrlSet.has(url);
+                    })
                 ]);
                 this.logInfo(`Loaded ${this.allSites.length} sites from Graph API`);
             } catch (error) {
