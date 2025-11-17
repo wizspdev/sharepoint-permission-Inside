@@ -426,8 +426,7 @@ class SharePointAPI {
                 'site collection documents',
                 'site collection images',
                 'pages',
-                'wizsp',
-                'shared documents',
+                'wizsp'
             ]);
             const disallowedFromConfig = this.config?.sharepoint?.disallowedDocumentLibraries || [];
             disallowedFromConfig.forEach(name => {
